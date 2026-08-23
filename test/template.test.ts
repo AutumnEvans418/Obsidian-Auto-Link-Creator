@@ -52,3 +52,7 @@ test('finds all matches in document order', () => {
 	assert.equal(all[1]?.name, 'test3');
 	assert.equal(all[1]?.content, undefined);
 });
+
+test('rejects blank name line (empty draft)', () => {
+	assert.equal(matchTemplate('- ', '- {{Link Name}} - {{Link Content}}'), null);
+});

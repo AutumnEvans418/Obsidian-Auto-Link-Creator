@@ -106,7 +106,7 @@ function parseAt(c: CompiledTemplate, lines: string[], i: number): ParsedTemplat
 	const m = c.header.exec(line);
 	if (!m) return null;
 	const nameCaptured = m[1];
-	if (!nameCaptured) return null;
+	if (!nameCaptured?.trim()) return null;
 	const name = nameCaptured.trim();
 	const out: ParsedTemplate = { name, lineIndex: i };
 	const aliasCaptured = m[2];

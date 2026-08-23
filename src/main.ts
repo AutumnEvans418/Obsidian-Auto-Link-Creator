@@ -12,7 +12,8 @@ import {
 	DEFAULT_SETTINGS,
 } from './settings';
 import { rootForm, singularize } from './nlp';
-import { findAllTemplate } from './template';
+import { findAllTemplate, ParsedTemplate } from './template';
+import { wikiLink } from './link';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
@@ -47,6 +48,39 @@ export default class AutoLinkCreator extends Plugin {
 						console.log('[auto-link]', hit);
 					}
 				}
+			},
+		});
+
+		// Convert matched template blocks in the active file into wiki links.
+		this.addCommand({
+			id: 'convert-keywords-to-links',
+			name: 'Convert keywords to links',
+			editorCallback: (editor: Editor) => {
+				const doc = editor.getValue();
+				const hits: ParsedTemplate[] = [];
+				const seen = new Set<number>();
+				for (const tpl of this.settings.templates) {
+					for (const hit of findAllTemplate(doc, tpl)) {
+						if (!seen.has(hit.lineIndex)) {
+							seen.add(hit.lineIndex);
+							hits.push(hit);
+						}
+					}
+				}
+				if (!hits.length) {
+					new Notice('No template matches found.');
+					return;
+				}
+				// Rewrite the whole doc in one pass (bottom-up) so multi-line
+				// blocks collapse cleanly; per-line replaceRange mangles newlines.
+				const out = doc.split('\n');
+				const sorted = [...hits].sort((a, b) => b.lineIndex - a.lineIndex);
+				for (const hit of sorted) {
+					const extra = hit.content ? hit.content.split('\n').length : 0;
+					out.splice(hit.lineIndex, extra + 1, `- ${wikiLink(hit)}`);
+				}
+				editor.setValue(out.join('\n'));
+				new Notice(`Linked ${hits.length} keyword(s).`);
 			},
 		});
 

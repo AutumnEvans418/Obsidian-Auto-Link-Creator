@@ -45,15 +45,18 @@ in Obsidian (reload plugin → run command/settings) **and** unit-tested where i
 contains pure logic (via `npm test`, `node --test` — no framework). Pure logic
 goes in obsidian-free modules under `src/` alongside `validation.ts`, then is
 imported by the plugin files.
+Add temp debug command so it can be tested in obsidian.
+Add test when fixing bugs.
 
 - [x] `nlp-compromise` dep; wrap plural/singular/past/participle/root in obsidian-free `src/nlp.ts`
 - [x] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
 - [ ] Title casing: capitalize each first letter of Link Name
 - [ ] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word via `nlp.ts`
 - [ ] Link detector: skip phrase whose token overlaps a `[[...]]` span
-- [ ] Link builders: wiki `[[Name|Alias]]` + markdown-relative `[text](path.md)` (URL-encoded path)
+- [x] Link builders: wiki `[[Name|Alias]]` + markdown-relative `[text](path.md)` (URL-encoded path)
 - [ ] Keyword extractor: tokenize, strip stop-words/punctuation, frequency count, drop <3-char words
-- [ ] Note creator: create `Name.md` (alias frontmatter + content); if exists, append content to bottom
+- [ ] Note creator: create `Name.md` (alias frontmatter + content); if exists, append content to bottom.
+- [ ] If enabled, opens created file without switching active file so that undo works.
 - [ ] File scanner: single `scanFile` pipeline, template+phrase+variant passes combined + deduped
 - [ ] Folder resolution: same-folder; vault-wide highest common folder of referencing files else root
 - [ ] Process-single-file + on-save trigger (rewrites source to insert links)
