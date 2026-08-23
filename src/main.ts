@@ -18,11 +18,23 @@ import { collectSuggestions } from './collectSuggestions';
 import { collectVaultSuggestions } from './collectVaultSuggestions';
 import { makeUndoableWrite } from './makeUndoableWrite';
 import { nlpSuggestions } from './nlpSuggestions';
+import { linkTemplateKeywords, processFileAndPreview } from './services/commandService';
+import type { IPlugin } from './services/ipluginInterface';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
 	private originalSaveCallback: ((checking: boolean) => any) | undefined;
 	private wrappedSaveCallback: ((checking: boolean) => any) | undefined;
+
+	pluginInterface(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): IPlugin {
+		return {
+			value: editor.getValue(),
+			set: v => editor.setValue(v),
+			notice: msg => new Notice(msg),
+			settings: this.settings,
+			folder: ctx.file ? ctx.file.parent?.path ?? '' : '',
+		}
+	}
 
 	async onload() {
 		await this.loadSettings();
@@ -42,7 +54,7 @@ export default class AutoLinkCreator extends Plugin {
 					this.settings.enableTemplateKeywords
 				) {
 					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-					if (view) this.linkTemplateKeywords(view.editor, true);
+					if (view) linkTemplateKeywords(this.pluginInterface(view.editor, view), true);
 				}
 				return res;
 			};
@@ -53,9 +65,9 @@ export default class AutoLinkCreator extends Plugin {
 		this.addCommand({
 			id: 'convert-keywords-to-links',
 			name: 'Process current file without preview',
-			editorCallback: (editor: Editor) => {
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				if (!this.settings.enableTemplateKeywords) return;
-				this.linkTemplateKeywords(editor);
+				linkTemplateKeywords(this.pluginInterface(editor, ctx));
 			},
 		});
 
@@ -64,61 +76,7 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'preview-create-notes',
 			name: 'Process current file and preview links',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-				const doc = editor.getValue();
-				const folder = ctx.file ? ctx.file.parent?.path ?? '' : '';
-				const suggestions: Suggestion[] = [];
-				if (this.settings.enableTemplateKeywords) {
-					suggestions.push(
-						...collectSuggestions(
-							findAllByTemplates(doc, this.settings.templates, {
-								ignoreCodeblocks: this.settings.ignoreCodeblocks,
-							}),
-						),
-					);
-				}
-				if (this.settings.enableNlpKeywords) {
-					const extra = this.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
-					suggestions.push(...nlpSuggestions(doc, extra));
-				}
-				if (!suggestions.length) {
-					new Notice('No keyword matches found.');
-					return;
-				}
-				const modal = new PreviewSuggestModal(this.app, suggestions, async (indices) => {
-					let created = 0;
-					let appended = 0;
-					const toLink: ParsedTemplate[] = [];
-					const onWrite = this.settings.openForUndo
-						? makeUndoableWrite(this.app)
-						: undefined;
-					for (const i of indices) {
-						const s = suggestions[i];
-						if (!s) continue;
-						for (const h of s.hits) toLink.push(h);
-						try {
-							const res = await createNote(
-								this.app.vault,
-								folder,
-								{ name: s.name, content: s.content, aliases: s.aliases },
-								this.settings.capitalize,
-								onWrite,
-							);
-							if (res.created) created++;
-							else appended++;
-						} catch (err) {
-							new Notice(`Auto Link Creator error: ${String(err)}`);
-						}
-					}
-					if (toLink.length) {
-						editor.setValue(applyLinks(editor.getValue(), toLink, this.settings.capitalize));
-						new Notice(
-							`Created ${created}, appended ${appended}. Linked ${toLink.length} keyword(s).`,
-						);
-					} else {
-						new Notice(`Created ${created}, appended ${appended}.`);
-					}
-				});
-				modal.open();
+				processFileAndPreview(this.pluginInterface(editor, ctx));
 			},
 		});
 
@@ -205,20 +163,6 @@ export default class AutoLinkCreator extends Plugin {
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new AutoLinkSettingTab(this.app, this));
-	}
-
-	/** Rewrite template keyword lines in `editor` into wiki links, idempotently. */
-	linkTemplateKeywords(editor: Editor, quiet = false): void {
-		const doc = editor.getValue();
-		const hits = findAllByTemplates(doc, this.settings.templates, {
-			ignoreCodeblocks: this.settings.ignoreCodeblocks,
-		});
-		if (!hits.length) {
-			if (!quiet) new Notice('No template matches found.');
-			return;
-		}
-		editor.setValue(applyLinks(doc, hits, this.settings.capitalize));
-		new Notice(`Linked ${hits.length} keyword(s).`);
 	}
 
 	onunload() {

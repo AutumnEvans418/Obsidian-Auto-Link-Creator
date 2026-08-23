@@ -2,6 +2,7 @@ import { TFile, Vault } from 'obsidian';
 import { mergeAliasesIntoDoc, mergeContent, noteBody } from './note';
 import type { NoteFields } from './note';
 import { titleCase } from './nlp';
+import type { IPlugin } from './services/ipluginInterface';
 
 /** Case-insensitive name (lowercased, extension stripped). */
 const bare = (p: string) => p.split('/').pop()?.replace(/\.md$/i, '') ?? '';
@@ -12,18 +13,18 @@ const bare = (p: string) => p.split('/').pop()?.replace(/\.md$/i, '') ?? '';
  * when none exists on disk.
  */
 async function findOrphan(
-	adapter: Vault['adapter'],
+	adapter: IPlugin,
 	folder: string,
 	name: string,
 ): Promise<string | null> {
 	let entries;
 	try {
-		entries = await adapter.list(folder);
+		entries = await adapter.getFiles(folder);
 	} catch {
 		return null;
 	}
 	const want = name.toLowerCase();
-	for (const f of entries.files) {
+	for (const f of entries) {
 		if (f.includes('/') && !f.toLowerCase().startsWith(`${folder}/`.toLowerCase()))
 			continue;
 		if (bare(f).toLowerCase() === want) return f;
@@ -37,7 +38,7 @@ async function findOrphan(
  * (direct adapter writes cause ghost duplicates in the file explorer).
  */
 export async function createNote(
-	vault: Vault,
+	vault: IPlugin,
 	folder: string,
 	f: NoteFields,
 	capitalize = true,
@@ -49,13 +50,13 @@ export async function createNote(
 	const appendPath = async (path: string): Promise<{ path: string; created: boolean }> => {
 		if (f.content || f.aliases?.length || f.alias) {
 			const indexed = vault.getFileByPath(path);
-			let cur = indexed ? await vault.read(indexed) : await vault.adapter.read(path);
+			let cur = indexed ? await vault.read(indexed) : await vault.read(path);
 			const withAliases = mergeAliasesIntoDoc(cur, [f.alias, ...(f.aliases ?? [])].filter((a): a is string => !!a));
 			if (withAliases !== cur) cur = withAliases;
 			const merged = mergeContent(cur, f.content ?? '');
 			if (onWrite) await onWrite(path, merged);
 			else if (indexed) await vault.modify(indexed, merged);
-			else await vault.adapter.write(path, merged);
+			else await vault.write(path, merged);
 		}
 		return { path, created: false };
 	};
@@ -70,7 +71,7 @@ export async function createNote(
 		return { path: canonical, created: true };
 	} catch {
 		// An orphaned file on disk (different case, or not yet indexed).
-		const orphan = await findOrphan(vault.adapter, folder, f.name);
+		const orphan = await findOrphan(vault, folder, f.name);
 		if (orphan) return appendPath(orphan);
 		throw new Error(`create ${canonical} failed`);
 	}
