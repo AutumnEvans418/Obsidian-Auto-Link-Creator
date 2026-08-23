@@ -76,6 +76,33 @@ const TEMPLATES = [
 	'- {{Link Name}} - {{Link Content}}',
 ];
 
+test('applyLinks wraps only the name, keeping content and formatting', () => {
+	const doc = ['- Armor Class (AC) - The damage threshold', '- Plain - just content', ''].join('\n');
+	const hits = [
+		{ name: 'Armor Class (AC)', target: 'Armor Class', lineIndex: 0, content: 'The damage threshold' },
+		{ name: 'Plain', lineIndex: 1, content: 'just content' },
+	];
+	const out = applyLinks(doc, hits, true);
+	assert.equal(
+		out,
+		[
+			'- [[Armor Class|Armor Class (AC)]] - The damage threshold',
+			'- [[Plain]] - just content',
+			'',
+		].join('\n'),
+	);
+});
+
+test('applyLinks links only the name, leaving an alias outside it', () => {
+	const doc = '- Armor Class (AC) - The damage threshold';
+	const out = applyLinks(
+		doc,
+		[{ name: 'Armor Class', alias: 'AC', lineIndex: 0, content: 'The damage threshold' }],
+		true,
+	);
+	assert.equal(out, '- [[Armor Class]] (AC) - The damage threshold');
+});
+
 test('running the pipeline twice is a no-op the second time', () => {
 	const doc = [
 		'- Foo (F) - first content',

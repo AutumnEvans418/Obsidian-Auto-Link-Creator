@@ -6,6 +6,8 @@ export interface ParsedTemplate {
 	alias?: string;
 	content?: string;
 	lineIndex: number;
+	/** Resolved note name when `name` is a foldable variant; set by applyers. */
+	target?: string;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeContent, noteBody } from '../src/note.ts';
+import { mergeAliasesIntoDoc, mergeContent, noteBody } from '../src/note.ts';
 
 test('body with aliases adds frontmatter', () => {
 	assert.equal(
@@ -38,6 +38,23 @@ test('mergeContent appends new content after blank line', () => {
 test('mergeContent skips content already present as last block', () => {
 	assert.equal(mergeContent('a\n\nhello', 'hello'), 'a\n\nhello');
 	assert.equal(mergeContent('hello', 'hello'), 'hello');
+});
+
+test('mergeAliasesIntoDoc adds missing aliases, keeps existing and body', () => {
+	assert.equal(
+		mergeAliasesIntoDoc('---\naliases:\n  - Old\n---\nBody\n', ['AC', 'Old']),
+		'---\naliases:\n  - Old\n  - AC\n---\nBody\n',
+	);
+});
+
+test('mergeAliasesIntoDoc no-ops when aliases already present', () => {
+	const cur = '---\naliases:\n  - AC\n---\nBody\n';
+	assert.equal(mergeAliasesIntoDoc(cur, ['AC']), cur);
+});
+
+test('mergeAliasesIntoDoc no-ops without frontmatter or aliases key', () => {
+	assert.equal(mergeAliasesIntoDoc('Just body\n', ['AC']), 'Just body\n');
+	assert.equal(mergeAliasesIntoDoc('---\ntitle: X\n---\n', ['AC']), '---\ntitle: X\n---\n');
 });
 
 test('mergeContent skips empty content and empty base', () => {

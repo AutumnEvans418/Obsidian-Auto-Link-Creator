@@ -28,34 +28,6 @@ export default class AutoLinkCreator extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// TEMP: verify nlp-compromise bundled + loads inside Obsidian. Remove when real UI landed.
-		this.addRibbonIcon('link', 'Test nlp-comprromise', () => {
-			new Notice(`nlp loaded. changed→${rootForm('changed')}. Cows→${singularize('Cows')}`);
-		});
-		this.addCommand({
-			id: 'test-nlp-load',
-			name: 'Test nlp-compromise loads',
-			callback: () => {
-				new Notice(`changed→${rootForm('changed')}. Cows→${singularize('Cows')}`);
-			},
-		});
-
-		// TEMP: debug template parser on active file. Remove once wired to real UI.
-		const TEMPLATES = [
-			'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
-			'- {{Link Name}} ({{Link Alias}})\n  - {{Link Content}}',
-		];
-		this.addCommand({
-			id: 'debug-template-parse',
-			name: 'Debug: parse templates on active file',
-			editorCallback: (editor: Editor) => {
-				const doc = editor.getValue();
-				for (const hit of findAllByTemplates(doc, TEMPLATES)) {
-					console.log('[auto-link]', hit);
-				}
-			},
-		});
-
 		// Format-on-save: wrap the built-in save command so linked template
 		// keywords are converted right after a save. Mirrors kdnk/obsidian-
 		// automatic-linker (override `editor:save-file`'s checkCallback).
@@ -248,10 +220,7 @@ export default class AutoLinkCreator extends Plugin {
 											const root = rootForm(h.name.toLowerCase());
 											if (toLink.has(root)) {
 												const target = nameByRoot.get(root);
-												if (target && target !== h.name) {
-													h.alias = h.alias || h.name;
-													h.name = target;
-												}
+												if (target && target !== h.name) h.target = target;
 											}
 											return h;
 										})
@@ -442,6 +411,7 @@ async function collectVaultSuggestions(
 				const e = acc.get(rootForm(lead.name.toLowerCase())) ?? entry(lead.name);
 				for (const h of group) {
 					if (h.name !== e.name) e.aliases.add(h.name);
+					if (h.alias && h.alias !== e.name) e.aliases.add(h.alias);
 				}
 				e.hits.push(...group);
 				e.files.add(file.path);

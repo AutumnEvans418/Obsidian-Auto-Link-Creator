@@ -1,4 +1,4 @@
-import { groupByReference, type ParsedTemplate } from './template.ts';
+import type { ParsedTemplate } from './template.ts';
 import { titleCase } from './nlp.ts';
 
 type LinkFields = Pick<ParsedTemplate, 'name' | 'alias'>;
@@ -37,30 +37,30 @@ export function markdownLink(
 }
 
 /**
- * Rewrite a doc, replacing the matched template blocks (bottom-up) with
- * `- [[Name|Alias]]` link lines. Multi-line child content collapses into one.
- * Variants of the same reference merge into a single link: the lead line stays
- * (as the link), the other variant lines are removed (they live on as aliases
- * in the created note's frontmatter).
+ * Rewrite a doc, wrapping each matched line's link name in a wiki link while
+ * leaving everything else — content and formatting — untouched. The line
+ * `- Armor Class (AC) - The damage threshold` becomes
+ * `- [[Armor Class|Armor Class (AC)]] - The damage threshold` (the resolved
+ * note as target, the original word as displayed text).
  */
 export function applyLinks(doc: string, hits: ParsedTemplate[], capitalize: boolean): string {
-	type Op = { lineIndex: number; link: string | null; deleteCount: number };
-	const ops: Op[] = [];
-	for (const group of groupByReference(hits)) {
-		const sorted = [...group].sort((a, b) => a.lineIndex - b.lineIndex);
-		sorted.forEach((hit, k) => {
-			const extra = hit.content ? hit.content.split('\n').length : 0;
-			if (k === 0) {
-				ops.push({ lineIndex: hit.lineIndex, link: wikiLink(hit, capitalize), deleteCount: extra + 1 });
-			} else {
-				ops.push({ lineIndex: hit.lineIndex, link: null, deleteCount: extra + 1 });
-			}
-		});
+	const lines = doc.split('\n');
+	for (const hit of hits) {
+		const line = lines[hit.lineIndex];
+		if (line === undefined) continue;
+		const prefix = /^\s*[-*]\s*/.exec(line)?.[0]?.length ?? 0;
+		// Target the folded note when present; otherwise self-link. The
+		// displayed text keeps the original surface word, so the visible line
+		// is unchanged apart from the [[ ]] wrapper.
+		// Link only the name, leaving an alias template's `(alias)` as plain
+		// text after it — like Obsidian's own alias display. A folded variant
+		// keeps its surface word via an alias so the visible text is unchanged.
+		const target = hit.target ?? hit.name;
+		const link =
+			target === hit.name
+				? wikiLink({ name: hit.name }, capitalize)
+				: wikiLink({ name: target, alias: hit.name }, capitalize);
+		lines[hit.lineIndex] = line.slice(0, prefix) + link + line.slice(prefix + hit.name.length);
 	}
-	ops.sort((a, b) => b.lineIndex - a.lineIndex);
-	const out = doc.split('\n');
-	for (const op of ops) {
-		out.splice(op.lineIndex, op.deleteCount, ...(op.link ? [`- ${op.link}`] : []));
-	}
-	return out.join('\n');
+	return lines.join('\n');
 }

@@ -1,5 +1,5 @@
 import { TFile, Vault } from 'obsidian';
-import { mergeContent, noteBody } from './note';
+import { mergeAliasesIntoDoc, mergeContent, noteBody } from './note';
 import type { NoteFields } from './note';
 import { titleCase } from './nlp';
 
@@ -47,10 +47,12 @@ export async function createNote(
 	const canonical = folder ? `${folder}/${f.name}.md` : `${f.name}.md`;
 
 	const appendPath = async (path: string): Promise<{ path: string; created: boolean }> => {
-		if (f.content) {
+		if (f.content || f.aliases?.length || f.alias) {
 			const indexed = vault.getFileByPath(path);
-			const cur = indexed ? await vault.read(indexed) : await vault.adapter.read(path);
-			const merged = mergeContent(cur, f.content);
+			let cur = indexed ? await vault.read(indexed) : await vault.adapter.read(path);
+			const withAliases = mergeAliasesIntoDoc(cur, [f.alias, ...(f.aliases ?? [])].filter((a): a is string => !!a));
+			if (withAliases !== cur) cur = withAliases;
+			const merged = mergeContent(cur, f.content ?? '');
 			if (onWrite) await onWrite(path, merged);
 			else if (indexed) await vault.modify(indexed, merged);
 			else await vault.adapter.write(path, merged);
