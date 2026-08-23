@@ -12,8 +12,9 @@ import {
 	DEFAULT_SETTINGS,
 } from './settings';
 import { rootForm, singularize } from './nlp';
-import { findAllTemplate, ParsedTemplate } from './template';
+import { findAllByTemplates, ParsedTemplate } from './template';
 import { wikiLink } from './link';
+import { createNote } from './creator';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
@@ -43,10 +44,8 @@ export default class AutoLinkCreator extends Plugin {
 			name: 'Debug: parse templates on active file',
 			editorCallback: (editor: Editor) => {
 				const doc = editor.getValue();
-				for (const tpl of TEMPLATES) {
-					for (const hit of findAllTemplate(doc, tpl)) {
-						console.log('[auto-link]', hit);
-					}
+				for (const hit of findAllByTemplates(doc, TEMPLATES)) {
+					console.log('[auto-link]', hit);
 				}
 			},
 		});
@@ -57,16 +56,9 @@ export default class AutoLinkCreator extends Plugin {
 			name: 'Convert keywords to links',
 			editorCallback: (editor: Editor) => {
 				const doc = editor.getValue();
-				const hits: ParsedTemplate[] = [];
-				const seen = new Set<number>();
-				for (const tpl of this.settings.templates) {
-					for (const hit of findAllTemplate(doc, tpl)) {
-						if (!seen.has(hit.lineIndex)) {
-							seen.add(hit.lineIndex);
-							hits.push(hit);
-						}
-					}
-				}
+				const hits: ParsedTemplate[] = findAllByTemplates(doc, this.settings.templates, {
+					ignoreCodeblocks: this.settings.ignoreCodeblocks,
+				});
 				if (!hits.length) {
 					new Notice('No template matches found.');
 					return;
@@ -81,6 +73,31 @@ export default class AutoLinkCreator extends Plugin {
 				}
 				editor.setValue(out.join('\n'));
 				new Notice(`Linked ${hits.length} keyword(s).`);
+			},
+		});
+
+		// TEMP: create target notes for active file's template hits. Remove when real UI landed.
+		this.addCommand({
+			id: 'debug-create-notes',
+			name: 'Debug: create notes for template hits',
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const doc = editor.getValue();
+				const folder = ctx.file ? ctx.file.parent?.path ?? '' : '';
+				let created = 0;
+				let appended = 0;
+				const seen = new Set<string>();
+				void (async () => {
+					for (const hit of findAllByTemplates(doc, this.settings.templates, {
+						ignoreCodeblocks: this.settings.ignoreCodeblocks,
+					})) {
+						if (seen.has(hit.name)) continue;
+						seen.add(hit.name);
+						const res = await createNote(this.app.vault, folder, hit);
+						if (res.created) created++;
+						else appended++;
+					}
+					new Notice(`Created ${created}, appended ${appended}.`);
+				})();
 			},
 		});
 

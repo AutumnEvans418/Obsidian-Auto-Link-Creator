@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchTemplate, findAllTemplate, compileTemplate } from '../src/template.ts';
+import { matchTemplate, findAllTemplate, findAllByTemplates, compileTemplate } from '../src/template.ts';
 
 const INLINE = '- {{Link Name}} ({{Link Alias}}) - {{Link Content}}';
 const NESTED = '- {{Link Name}} ({{Link Alias}})\n  - {{Link Content}}';
@@ -55,4 +55,56 @@ test('finds all matches in document order', () => {
 
 test('rejects blank name line (empty draft)', () => {
 	assert.equal(matchTemplate('- ', '- {{Link Name}} - {{Link Content}}'), null);
+});
+
+test('ignores template lines inside fenced code block by default', () => {
+	const doc = ['Intro text', '```', '- Fake (no) - not a real hit', '```', '- Real (yes) - is a hit'].join('\n');
+	const all = findAllTemplate(doc, INLINE);
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Real');
+});
+
+test('matches inside code block when ignoreCodeblocks=false', () => {
+	const doc = ['```', '- Fake (no) - should match', '```'].join('\n');
+	const all = findAllTemplate(doc, INLINE, { ignoreCodeblocks: false });
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Fake');
+});
+
+const DEFAULTS = [
+	'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
+	'- {{Link Name}} ({{Link Alias}})',
+	'- {{Link Name}} - {{Link Content}}',
+];
+
+const PREVIEW = [
+	'- Test2 (alias32)',
+	'\t- content1',
+	'\t- content2',
+	'- test3 (alias) - content',
+	'- Risk Appetite - Level of risk accepted.',
+	'- Access control systems (ACS) - Controls who enters.',
+	'- ',
+	'just prose',
+].join('\n');
+
+test('first-matching-template per line; 4 hits in fixture', () => {
+	const all = findAllByTemplates(PREVIEW, DEFAULTS);
+	assert.equal(all.length, 4);
+	// Template order: name+alias+content wins before the loose name-only form,
+	// so sibling lines (content1) are not lifted into standalone notes.
+	const names = all.map((h) => h.name);
+	assert.deepEqual(names, [
+		'Test2',
+		'test3',
+		'Risk Appetite',
+		'Access control systems',
+	]);
+	assert.equal(all[0]?.alias, 'alias32');
+	assert.equal(all[0]?.content, 'content1\ncontent2');
+	assert.equal(all[1]?.alias, 'alias');
+	assert.equal(all[1]?.content, 'content');
+	assert.equal(all[2]?.content, 'Level of risk accepted.');
+	assert.equal(all[3]?.alias, 'ACS');
+	assert.equal(all[3]?.content, 'Controls who enters.');
 });

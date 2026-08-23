@@ -1,4 +1,5 @@
 # Obsidian plugin — Auto Link Creator
+- use rtk.
 
 ## Repo state (read this first)
 
@@ -48,6 +49,7 @@ imported by the plugin files.
 Add temp debug command so it can be tested in obsidian.
 Add test when fixing bugs.
 
+- [x] Ignore code blocks
 - [x] `nlp-compromise` dep; wrap plural/singular/past/participle/root in obsidian-free `src/nlp.ts`
 - [x] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
 - [ ] Title casing: capitalize each first letter of Link Name

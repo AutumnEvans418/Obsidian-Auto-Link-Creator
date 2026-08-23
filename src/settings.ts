@@ -5,15 +5,21 @@ import { isValidTemplate } from './validation';
 export interface AutoLinkSettings {
 	/** Line patterns like `- {{Link Name}} ({{Link Alias}}) - {{Link Content}}`. First match wins. */
 	templates: string[];
+	/** Skip template/child-line matching inside fenced code blocks (```). */
+	ignoreCodeblocks: boolean;
 }
 
 export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	templates: [
-		'- {{Link Name}} - {{Link Content}}',
-		'- {{Link Name}} ({{Link Alias}})',
 		'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
+		'- {{Link Name}} ({{Link Alias}})',
+		'- {{Link Name}} - {{Link Content}}',
 	],
+	ignoreCodeblocks: true,
 };
+
+const CODEBLOCK_HELP =
+	'Skip contents of fenced code blocks (```).'
 
 const TEMPLATE_HELP =
 	'One line pattern per entry. Fields: {{Link Name}}, {{Link Alias}}, {{Link Content}}. First matching template wins.';
@@ -63,6 +69,18 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 			field!.inputEl.rows = 2;
 			field!.inputEl.cols = 50;
 		});
+
+		new Setting(containerEl)
+			.setName('Ignore code blocks')
+			.setDesc(CODEBLOCK_HELP)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.ignoreCodeblocks)
+					.onChange(async (value) => {
+						this.plugin.settings.ignoreCodeblocks = value;
+						await this.plugin.saveSettings();
+					}),
+			);
 
 		new Setting(containerEl).addExtraButton((btn) =>
 			btn
