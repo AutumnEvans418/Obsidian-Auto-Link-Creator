@@ -34,27 +34,34 @@ Read `PLAN.md` before implementing; it is the authoritative spec. Core workflows
 
 ## Build checklist
 
+Decisions locked in `ARCHITECTURE.md` (Q1–Q12 answered): use `nlp-compromise`;
+single deduped `scanFile` pipeline; relative links are markdown `[text](path.md)`;
+overlap link-detection; new notes in source folder (vault-wide: highest common
+folder else root); existing note ⇒ **append** content to bottom; on-save + command
+entry points gated by preview; undo wanted.
+
 Implemented one at a time; tick off as done. Each item is small enough to verify
 in Obsidian (reload plugin → run command/settings) **and** unit-tested where it
 contains pure logic (via `npm test`, `node --test` — no framework). Pure logic
 goes in obsidian-free modules under `src/` alongside `validation.ts`, then is
 imported by the plugin files.
 
-- [ ] Template parser: match a line vs configured templates → `ParsedTemplate {name, alias, content}`
+- [ ] `nlp-compromise` dep; wrap plural/singular/past/participle/root in obsidian-free `src/nlp.ts`
+- [ ] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
 - [ ] Title casing: capitalize each first letter of Link Name
-- [ ] Pluralization: singularize/pluralize English nouns (`Cow`⇄`Cows`, `Party`⇄`Parties`)
-- [ ] Lemmatization: basic verb forms (`Changed`/`Changing` → `Change`)
-- [ ] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word
-- [ ] Link detector: skip phrases already inside `[[...]]`
-- [ ] Link builder: `[[Name|Alias]]` + note content with alias frontmatter
-- [ ] Keyword extractor: tokenize, strip stop-words/punctuation, frequency count
-- [ ] Note creator: write `.md` from `ParsedTemplate` (name, content, alias frontmatter)
-- [ ] File scanner: scan one MarkdownFile via formats → list of link actions
-- [ ] Process-single-file command + on-save trigger
-- [ ] Process-whole-vault command
-- [ ] Preview modal: suggested links, select/apply before committing
-- [ ] Collision guard: skip if note with same name/alias exists (sibling-plugin compat)
-- [ ] Settings tab: add relative-link, auto-create-note, capitalize toggles
+- [ ] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word via `nlp.ts`
+- [ ] Link detector: skip phrase whose token overlaps a `[[...]]` span
+- [ ] Link builders: wiki `[[Name|Alias]]` + markdown-relative `[text](path.md)` (URL-encoded path)
+- [ ] Keyword extractor: tokenize, strip stop-words/punctuation, frequency count, drop <3-char words
+- [ ] Note creator: create `Name.md` (alias frontmatter + content); if exists, append content to bottom
+- [ ] File scanner: single `scanFile` pipeline, template+phrase+variant passes combined + deduped
+- [ ] Folder resolution: same-folder; vault-wide highest common folder of referencing files else root
+- [ ] Process-single-file + on-save trigger (rewrites source to insert links)
+- [ ] Process-whole-vault command (scan all `.md`, resolve folders, batch apply)
+- [ ] Preview modal: suggested links + note content, select/apply before committing (gates destructive batch)
+- [ ] Settings: command on/off, on-save on/off toggles + relative-link, auto-create, capitalize
+- [ ] Idempotency test: second run near-no-op (notes exist ⇒ skip/append)
+- [ ] Undo/rollback of a preview apply (multi-file mutations)
 
 ## Commands (npm)
 
