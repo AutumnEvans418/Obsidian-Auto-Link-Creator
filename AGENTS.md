@@ -47,7 +47,7 @@ goes in obsidian-free modules under `src/` alongside `validation.ts`, then is
 imported by the plugin files.
 
 - [x] `nlp-compromise` dep; wrap plural/singular/past/participle/root in obsidian-free `src/nlp.ts`
-- [ ] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
+- [x] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
 - [ ] Title casing: capitalize each first letter of Link Name
 - [ ] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word via `nlp.ts`
 - [ ] Link detector: skip phrase whose token overlaps a `[[...]]` span

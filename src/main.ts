@@ -12,6 +12,7 @@ import {
 	DEFAULT_SETTINGS,
 } from './settings';
 import { rootForm, singularize } from './nlp';
+import { findAllTemplate } from './template';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
@@ -28,6 +29,24 @@ export default class AutoLinkCreator extends Plugin {
 			name: 'Test nlp-compromise loads',
 			callback: () => {
 				new Notice(`changed→${rootForm('changed')}. Cows→${singularize('Cows')}`);
+			},
+		});
+
+		// TEMP: debug template parser on active file. Remove once wired to real UI.
+		const TEMPLATES = [
+			'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
+			'- {{Link Name}} ({{Link Alias}})\n  - {{Link Content}}',
+		];
+		this.addCommand({
+			id: 'debug-template-parse',
+			name: 'Debug: parse templates on active file',
+			editorCallback: (editor: Editor) => {
+				const doc = editor.getValue();
+				for (const tpl of TEMPLATES) {
+					for (const hit of findAllTemplate(doc, tpl)) {
+						console.log('[auto-link]', hit);
+					}
+				}
 			},
 		});
 
