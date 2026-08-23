@@ -52,22 +52,23 @@ Add test when fixing bugs.
 - [x] Ignore code blocks
 - [x] `nlp-compromise` dep; wrap plural/singular/past/participle/root in obsidian-free `src/nlp.ts`
 - [x] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
-- [ ] Title casing: capitalize each first letter of Link Name
-- [ ] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word via `nlp.ts`
+- [x] Title casing: capitalize each first letter of Link Name
+- [x] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word via `nlp.ts`
 - [ ] Link detector: skip phrase whose token overlaps a `[[...]]` span
 - [x] Link builders: wiki `[[Name|Alias]]` + markdown-relative `[text](path.md)` (URL-encoded path)
 - [ ] Keyword extractor: tokenize, strip stop-words/punctuation, frequency count, drop <3-char words
-- [ ] Note creator: create `Name.md` (alias frontmatter + content); if exists, append content to bottom.
+- [x] Note creator: create `Name.md` (alias frontmatter + content); if exists, append content to bottom.
 - [ ] If enabled, opens created file without switching active file so that undo works.
 - [ ] File scanner: single `scanFile` pipeline, template+phrase+variant passes combined + deduped
 - [ ] Folder resolution: same-folder; vault-wide highest common folder of referencing files else root
 - [ ] Process-single-file + on-save trigger (rewrites source to insert links)
 - [ ] Process-whole-vault command (scan all `.md`, resolve folders, batch apply)
-- [ ] Preview modal: suggested links + note content, select/apply before committing (gates destructive batch)
+- [x] Preview modal: suggested links + note content, select/apply before committing (gates destructive batch)
 - [ ] Settings: command on/off, on-save on/off toggles + relative-link, auto-create, capitalize
-- [ ] Idempotency test: second run near-no-op (notes exist ⇒ skip/append)
+- [x] Idempotency test: second run near-no-op (notes exist ⇒ skip/append)
 - [ ] Undo/rollback of a preview apply (multi-file mutations)
-
+- [ ] Setting for template based keywords.
+- [ ] Setting for NLP based keywords.
 ## Commands (npm)
 
 ```bash

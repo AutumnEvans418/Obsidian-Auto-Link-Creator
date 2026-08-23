@@ -31,3 +31,31 @@ export function pluralize(word: string): string {
 export function singularize(word: string): string {
 	return inflectNoun(word, false);
 }
+
+/** Capitalize the first letter of each word: `access control` → `Access Control`. */
+export function titleCase(text: string): string {
+	return text.replace(/\b(\p{L})/gu, (m: string) => m.toUpperCase());
+}
+
+/** Distinct normalized variants of a phrase: plural, singular, root, stripped. */
+export function variantForms(phrase: string): string[] {
+	const base = phrase.toLowerCase().replace(/\s+/g, ' ').trim();
+	const set = new Set<string>();
+	const add = (s: string) => {
+		s = s.trim().toLowerCase();
+		if (s) set.add(s);
+	};
+	add(base);
+	add(rootForm(phrase));
+	add(pluralize(phrase));
+	add(singularize(phrase));
+	add(base.replace(/[^a-z0-9]+/g, ' ').trim());
+	return [...set];
+}
+
+/** True when two names are the same reference under any shared form. */
+export function sameReference(a: string, b: string): boolean {
+	const A = variantForms(a);
+	const B = new Set(variantForms(b));
+	return A.some((x) => B.has(x));
+}

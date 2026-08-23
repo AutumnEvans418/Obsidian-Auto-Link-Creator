@@ -1,8 +1,43 @@
+import { sameReference } from './nlp.ts';
+import { overlapsExistingLink } from './linkDetector.ts';
+
 export interface ParsedTemplate {
 	name: string;
 	alias?: string;
 	content?: string;
 	lineIndex: number;
+}
+
+/**
+ * Group hits whose names are the same reference under NLP forms (e.g.
+ * "Risk Appetite" and "Risk Appetites"). First-seen name leads its group.
+ */
+/**
+ * Combine a reference group's contents (document order, deduped) into one
+ * block. Variants of the same note each contribute their content.
+ */
+export function groupContent(group: ParsedTemplate[]): string | undefined {
+	const seen = new Set<string>();
+	const parts: string[] = [];
+	for (const h of group) {
+		if (!h.content || seen.has(h.content)) continue;
+		seen.add(h.content);
+		parts.push(h.content);
+	}
+	return parts.length ? parts.join('\n\n') : undefined;
+}
+
+export function groupByReference(hits: ParsedTemplate[]): ParsedTemplate[][] {
+	const groups: ParsedTemplate[][] = [];
+	for (const h of hits) {
+		const group = groups.find((g) => {
+			const lead = g[0];
+			return lead !== undefined && sameReference(lead.name, h.name);
+		});
+		if (group) group.push(h);
+		else groups.push([h]);
+	}
+	return groups;
 }
 
 type Field = 'name' | 'alias' | 'content';
@@ -68,6 +103,11 @@ export function compileTemplate(tpl: string): CompiledTemplate | null {
 export interface TemplateOptions {
 	/** Skip lines inside fenced code blocks (```). */
 	ignoreCodeblocks?: boolean;
+	/**
+	 * Skip a phrase whose name region overlaps an existing `[[...]]` span, so
+	 * re-running on already-linked output is a no-op. Default true.
+	 */
+	skipLinked?: boolean;
 }
 
 /** True when `line` is a ``` fence (opening or closing), optionally with a lang tag. */
@@ -90,6 +130,7 @@ export function findAllTemplate(
 	const out: ParsedTemplate[] = [];
 	const lines = text.split('\n');
 	const skipFence = opts.ignoreCodeblocks ?? true;
+	const skipLinked = opts.skipLinked ?? true;
 	let skipUntil = 0;
 	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
@@ -103,7 +144,7 @@ export function findAllTemplate(
 			if (inFence) continue;
 		}
 		if (i < skipUntil) continue;
-		const r = parseAt(c, lines, i);
+		const r = parseAt(c, lines, i, skipLinked);
 		if (r) {
 			out.push(r.hit);
 			if (r.childCount) skipUntil = i + 1 + r.childCount;
@@ -130,6 +171,7 @@ export function findAllByTemplates(
 	const lines = text.split('\n');
 	const out: ParsedTemplate[] = [];
 	const skipFence = opts.ignoreCodeblocks ?? true;
+	const skipLinked = opts.skipLinked ?? true;
 	let skipUntil = 0;
 	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
@@ -144,7 +186,7 @@ export function findAllByTemplates(
 		}
 		if (i < skipUntil) continue;
 		for (const c of comps) {
-			const r = parseAt(c, lines, i);
+			const r = parseAt(c, lines, i, skipLinked);
 			if (!r) continue;
 			out.push(r.hit);
 			if (r.childCount) skipUntil = i + 1 + r.childCount;
@@ -163,6 +205,7 @@ export function matchTemplate(
 	if (!c) return null;
 	const lines = text.split('\n');
 	const skipFence = opts.ignoreCodeblocks ?? true;
+	const skipLinked = opts.skipLinked ?? true;
 	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
@@ -174,7 +217,7 @@ export function matchTemplate(
 			}
 			if (inFence) continue;
 		}
-		const r = parseAt(c, lines, i);
+		const r = parseAt(c, lines, i, skipLinked);
 		if (r) return r.hit;
 	}
 	return null;
@@ -207,7 +250,12 @@ function gatherChildren(lines: string[], i: number): string[] {
 	return children;
 }
 
-function parseAt(c: CompiledTemplate, lines: string[], i: number): ParseResult | null {
+function parseAt(
+	c: CompiledTemplate,
+	lines: string[],
+	i: number,
+	skipLinked: boolean,
+): ParseResult | null {
 	const line = lines[i];
 	if (line === undefined) return null;
 	const m = c.header.exec(line);
@@ -215,18 +263,23 @@ function parseAt(c: CompiledTemplate, lines: string[], i: number): ParseResult |
 	const nameCaptured = m[1];
 	if (!nameCaptured?.trim()) return null;
 	const name = nameCaptured.trim();
+	// Skip a phrase whose name region overlaps an existing `[[...]]` span so a
+	// second run on already-linked output is a no-op (idempotency).
+	if (skipLinked) {
+		const prefix = line.match(/^\s*[-*]\s*/)?.[0]?.length ?? 0;
+		if (overlapsExistingLink(line, prefix, prefix + nameCaptured.length)) return null;
+	}
 	const out: ParsedTemplate = { name, lineIndex: i };
 	const aliasCaptured = m[2];
 	if (aliasCaptured) out.alias = aliasCaptured.trim();
 	let childCount = 0;
 	if (c.hasContent) {
-		let content = '';
-		if (!c.contentIsChild) {
-			const ci = c.fields.indexOf('content');
-			const captured = m[ci + 1];
-			if (captured) content = captured.trim();
-		}
-		if (!content) {
+		const ci = c.fields.indexOf('content');
+		const captured = m[ci + 1];
+		let content = captured?.trim() ?? '';
+		// Children win over inline when children exist (for a child template),
+		// and are used as a fallback when a line has no inline content.
+		if (!content || c.contentIsChild) {
 			const children = gatherChildren(lines, i);
 			if (children.length) {
 				content = children.join('\n');

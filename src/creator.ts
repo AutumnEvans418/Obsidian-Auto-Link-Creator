@@ -1,30 +1,76 @@
 import { TFile, Vault } from 'obsidian';
-import { NoteFields, noteBody } from './note';
+import { noteBody } from './note';
+import type { NoteFields } from './note';
+import { titleCase } from './nlp';
 
-function targetPath(folder: string, name: string): string {
-	return folder ? `${folder}/${name}.md` : `${name}.md`;
+/** Case-insensitive name (lowercased, extension stripped). */
+const bare = (p: string) => p.split('/').pop()?.replace(/\.md$/i, '') ?? '';
+
+/**
+ * Resolve a real file path in `folder` whose name matches `name` regardless of
+ * case (for detecting orphaned files Obsidian hasn't indexed). Returns null
+ * when none exists on disk.
+ */
+async function findOrphan(
+	adapter: Vault['adapter'],
+	folder: string,
+	name: string,
+): Promise<string | null> {
+	let entries;
+	try {
+		entries = await adapter.list(folder);
+	} catch {
+		return null;
+	}
+	const want = name.toLowerCase();
+	for (const f of entries.files) {
+		if (f.includes('/') && !f.toLowerCase().startsWith(`${folder}/`.toLowerCase()))
+			continue;
+		if (bare(f).toLowerCase() === want) return f;
+	}
+	return null;
 }
 
 /**
- * Create `Name.md` under `folder`. If it already exists, append `content` to
- * the bottom instead of overwriting. Returns the path and whether a new note
- * was created.
+ * Create `Name.md` under `folder`, or append to it if it already exists.
+ * Writes go through Obsidian's vault API so the metadata index stays in sync
+ * (direct adapter writes cause ghost duplicates in the file explorer).
  */
 export async function createNote(
 	vault: Vault,
 	folder: string,
 	f: NoteFields,
+	capitalize = true,
 ): Promise<{ path: string; created: boolean }> {
-	const path = targetPath(folder, f.name);
-	const existing = vault.getAbstractFileByPath(path);
-	if (existing instanceof TFile) {
+	f = { ...f, name: capitalize ? titleCase(f.name) : f.name };
+	const canonical = folder ? `${folder}/${f.name}.md` : `${f.name}.md`;
+
+	const appendPath = async (path: string): Promise<{ path: string; created: boolean }> => {
 		if (f.content) {
-			const cur = await vault.read(existing);
-			const merged = cur.trimEnd();
-			await vault.modify(existing, merged ? `${merged}\n\n${f.content}` : f.content);
+			const indexed = vault.getFileByPath(path);
+			if (indexed) await vault.modify(indexed, mergeContent(await vault.read(indexed), f.content));
+			else await vault.adapter.write(path, mergeContent(await vault.adapter.read(path), f.content));
 		}
 		return { path, created: false };
+	};
+
+	// Indexed? Prefer the canonical path (normal Obsidian case).
+	const indexed = vault.getFileByPath(canonical);
+	if (indexed) return appendPath(canonical);
+
+	// Index miss — create it so Obsidian registers the file (no ghost).
+	try {
+		await vault.create(canonical, noteBody(f));
+		return { path: canonical, created: true };
+	} catch {
+		// An orphaned file on disk (different case, or not yet indexed).
+		const orphan = await findOrphan(vault.adapter, folder, f.name);
+		if (orphan) return appendPath(orphan);
+		throw new Error(`create ${canonical} failed`);
 	}
-	await vault.create(path, noteBody(f));
-	return { path, created: true };
+}
+
+function mergeContent(cur: string, content: string): string {
+	const merged = cur.trimEnd();
+	return merged ? `${merged}\n\n${content}` : content;
 }

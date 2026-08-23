@@ -7,6 +7,8 @@ export interface AutoLinkSettings {
 	templates: string[];
 	/** Skip template/child-line matching inside fenced code blocks (```). */
 	ignoreCodeblocks: boolean;
+	/** Capitalize each first letter of note names and link text. */
+	capitalize: boolean;
 }
 
 export const DEFAULT_SETTINGS: AutoLinkSettings = {
@@ -16,6 +18,7 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 		'- {{Link Name}} - {{Link Content}}',
 	],
 	ignoreCodeblocks: true,
+	capitalize: true,
 };
 
 const CODEBLOCK_HELP =
@@ -78,6 +81,18 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.ignoreCodeblocks)
 					.onChange(async (value) => {
 						this.plugin.settings.ignoreCodeblocks = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Capitalize names')
+			.setDesc('Capitalize each first letter of note names and link text.')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.capitalize)
+					.onChange(async (value) => {
+						this.plugin.settings.capitalize = value;
 						await this.plugin.saveSettings();
 					}),
 			);

@@ -1,20 +1,22 @@
 import {
+	App,
 	Editor,
 	MarkdownView,
-	MarkdownFileInfo,
 	Modal,
 	Notice,
 	Plugin,
+	type MarkdownFileInfo,
 } from 'obsidian';
-import {
-	AutoLinkSettingTab,
-	AutoLinkSettings,
-	DEFAULT_SETTINGS,
-} from './settings';
+import { AutoLinkSettingTab, DEFAULT_SETTINGS } from './settings';
+import type { AutoLinkSettings } from './settings';
 import { rootForm, singularize } from './nlp';
-import { findAllByTemplates, ParsedTemplate } from './template';
-import { wikiLink } from './link';
+import { findAllByTemplates, groupByReference, groupContent } from './template';
+import type { ParsedTemplate } from './template';
+import { applyLinks } from './link';
 import { createNote } from './creator';
+import PreviewModal from './ui/PreviewModal.svelte';
+import { mount, unmount } from 'svelte';
+import type { Suggestion } from './ui/suggestion';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
@@ -63,15 +65,7 @@ export default class AutoLinkCreator extends Plugin {
 					new Notice('No template matches found.');
 					return;
 				}
-				// Rewrite the whole doc in one pass (bottom-up) so multi-line
-				// blocks collapse cleanly; per-line replaceRange mangles newlines.
-				const out = doc.split('\n');
-				const sorted = [...hits].sort((a, b) => b.lineIndex - a.lineIndex);
-				for (const hit of sorted) {
-					const extra = hit.content ? hit.content.split('\n').length : 0;
-					out.splice(hit.lineIndex, extra + 1, `- ${wikiLink(hit)}`);
-				}
-				editor.setValue(out.join('\n'));
+				editor.setValue(applyLinks(doc, hits, this.settings.capitalize));
 				new Notice(`Linked ${hits.length} keyword(s).`);
 			},
 		});
@@ -85,19 +79,84 @@ export default class AutoLinkCreator extends Plugin {
 				const folder = ctx.file ? ctx.file.parent?.path ?? '' : '';
 				let created = 0;
 				let appended = 0;
-				const seen = new Set<string>();
 				void (async () => {
-					for (const hit of findAllByTemplates(doc, this.settings.templates, {
-						ignoreCodeblocks: this.settings.ignoreCodeblocks,
-					})) {
-						if (seen.has(hit.name)) continue;
-						seen.add(hit.name);
-						const res = await createNote(this.app.vault, folder, hit);
-						if (res.created) created++;
-						else appended++;
+					try {
+						const groups = groupByReference(
+							findAllByTemplates(doc, this.settings.templates, {
+								ignoreCodeblocks: this.settings.ignoreCodeblocks,
+							}),
+						);
+						for (const group of groups) {
+							const lead = group[0];
+							if (!lead) continue;
+							const aliases = group
+								.slice(1)
+								.map((h) => h.name)
+								.filter((n) => n !== lead.name);
+							const res = await createNote(
+								this.app.vault,
+								folder,
+								{ ...lead, aliases },
+								this.settings.capitalize,
+							);
+							if (res.created) created++;
+							else appended++;
+						}
+						new Notice(`Created ${created}, appended ${appended}.`);
+					} catch (err) {
+						new Notice(`Auto Link Creator error: ${String(err)}`);
 					}
-					new Notice(`Created ${created}, appended ${appended}.`);
 				})();
+			},
+		});
+
+		// Preview suggested notes in a modal, then create the selected ones.
+		this.addCommand({
+			id: 'preview-create-notes',
+			name: 'Preview suggested notes',
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const doc = editor.getValue();
+				const folder = ctx.file ? ctx.file.parent?.path ?? '' : '';
+				const suggestions = collectSuggestions(
+					findAllByTemplates(doc, this.settings.templates, {
+						ignoreCodeblocks: this.settings.ignoreCodeblocks,
+					}),
+				);
+				if (!suggestions.length) {
+					new Notice('No template matches found.');
+					return;
+				}
+				const modal = new PreviewSuggestModal(this.app, suggestions, async (indices) => {
+					let created = 0;
+					let appended = 0;
+					const toLink: ParsedTemplate[] = [];
+					for (const i of indices) {
+						const s = suggestions[i];
+						if (!s) continue;
+						for (const h of s.hits) toLink.push(h);
+						try {
+							const res = await createNote(
+								this.app.vault,
+								folder,
+								{ name: s.name, content: s.content, aliases: s.aliases },
+								this.settings.capitalize,
+							);
+							if (res.created) created++;
+							else appended++;
+						} catch (err) {
+							new Notice(`Auto Link Creator error: ${String(err)}`);
+						}
+					}
+					if (toLink.length) {
+						editor.setValue(applyLinks(editor.getValue(), toLink, this.settings.capitalize));
+						new Notice(
+							`Created ${created}, appended ${appended}. Linked ${toLink.length} keyword(s).`,
+						);
+					} else {
+						new Notice(`Created ${created}, appended ${appended}.`);
+					}
+				});
+				modal.open();
 			},
 		});
 
@@ -168,6 +227,47 @@ export default class AutoLinkCreator extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+}
+
+function collectSuggestions(hits: ParsedTemplate[]): Suggestion[] {
+	return groupByReference(hits).map((group) => {
+		const lead = group[0];
+		const rest = group.slice(1);
+		const aliases = rest.map((h) => h.name).filter((n) => n !== lead?.name);
+		return { name: lead?.name ?? '', aliases, content: groupContent(group), hits: group };
+	});
+}
+
+class PreviewSuggestModal extends Modal {
+	private comp: ReturnType<typeof mount> | undefined;
+
+	constructor(
+		app: App,
+		private suggestions: Suggestion[],
+		private onApply: (indices: number[]) => Promise<void>,
+	) {
+		super(app);
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.addClass('alc-preview');
+		this.comp = mount(PreviewModal, {
+			target: contentEl,
+			props: {
+				suggestions: this.suggestions,
+				onApply: (indices: number[]) => {
+					void this.onApply(indices).then(() => this.close());
+				},
+				onCancel: () => this.close(),
+			},
+		});
+	}
+
+	onClose() {
+		if (this.comp) unmount(this.comp);
+		this.contentEl.empty();
 	}
 }
 

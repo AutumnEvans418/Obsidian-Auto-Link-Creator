@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchTemplate, findAllTemplate, findAllByTemplates, compileTemplate } from '../src/template.ts';
+import {
+	matchTemplate,
+	findAllTemplate,
+	findAllByTemplates,
+	compileTemplate,
+	groupByReference,
+	groupContent,
+} from '../src/template.ts';
 
 const INLINE = '- {{Link Name}} ({{Link Alias}}) - {{Link Content}}';
 const NESTED = '- {{Link Name}} ({{Link Alias}})\n  - {{Link Content}}';
@@ -50,7 +57,37 @@ test('finds all matches in document order', () => {
 	assert.equal(all[0]?.alias, 'alias32');
 	assert.equal(all[0]?.content, 'content1\ncontent2');
 	assert.equal(all[1]?.name, 'test3');
-	assert.equal(all[1]?.content, undefined);
+	assert.equal(all[1]?.content, 'content');
+});
+
+test('inline content survives when a child-content template wins first', () => {
+	const tpls = [
+		'- {{Link Name}} ({{Link Alias}})\n  - {{Link Content}}',
+		'- {{Link Name}} ({{Link Alias}})',
+		'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
+		'- {{Link Name}} - {{Link Content}}',
+	];
+	const all = findAllByTemplates(
+		['- Risk Appetite - Level of risk accepted.',
+		 '- Access control systems (ACS) - Controls who enters.',
+		 '- Risk Appetites - level of risk'].join('\n'),
+		tpls,
+	);
+	const risk = all.find((h) => h.name === 'Risk Appetite');
+	assert.equal(risk?.content, 'Level of risk accepted.');
+	const access = all.find((h) => h.name === 'Access control systems');
+	assert.equal(access?.content, 'Controls who enters.');
+	assert.equal(access?.alias, 'ACS');
+});
+
+test('groupContent concatenates variant contents in order, deduped', () => {
+	const out = groupContent([
+		{ name: 'Risk Appetite', content: 'Level of risk accepted.', lineIndex: 0 },
+		{ name: 'Risk Appetites', content: 'level of risk', lineIndex: 2 },
+		{ name: 'Risk Appetite', content: 'level of risk', lineIndex: 4 },
+	]);
+	assert.equal(out, 'Level of risk accepted.\n\nlevel of risk');
+	assert.equal(groupContent([{ name: 'X', lineIndex: 0 }]), undefined);
 });
 
 test('rejects blank name line (empty draft)', () => {
@@ -107,4 +144,21 @@ test('first-matching-template per line; 4 hits in fixture', () => {
 	assert.equal(all[2]?.content, 'Level of risk accepted.');
 	assert.equal(all[3]?.alias, 'ACS');
 	assert.equal(all[3]?.content, 'Controls who enters.');
+});
+
+test('groupByReference merges variant forms into one note', () => {
+	const hits = findAllByTemplates(
+		[
+			'- Risk Appetite - Level of risk accepted.',
+			'- Risk Appetites - level of risk',
+			'- Access control systems (ACS) - Controls who enters.',
+		].join('\n'),
+		DEFAULTS,
+	);
+	const groups = groupByReference(hits);
+	assert.equal(groups.length, 2);
+	const appetite = groups.find((g) => g[0]?.name.toLowerCase().startsWith('risk'));
+	const acs = groups.find((g) => g[0]?.name.toLowerCase().startsWith('access'));
+	assert.equal(appetite?.length, 2);
+	assert.equal(acs?.length, 1);
 });
