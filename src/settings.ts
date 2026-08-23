@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting, TextAreaComponent } from 'obsidian';
 import type AutoLinkCreator from './main';
+import { isValidTemplate } from './validation';
 
 export interface AutoLinkSettings {
 	/** Line patterns like `- {{Link Name}} ({{Link Alias}}) - {{Link Content}}`. First match wins. */
@@ -16,11 +17,6 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 
 const TEMPLATE_HELP =
 	'One line pattern per entry. Fields: {{Link Name}}, {{Link Alias}}, {{Link Content}}. First matching template wins.';
-const NAME_FIELD = /\{\{\s*link name\s*\}\}/i;
-
-function isValidTemplate(tpl: string): boolean {
-	return NAME_FIELD.test(tpl);
-}
 
 export class AutoLinkSettingTab extends PluginSettingTab {
 	plugin: AutoLinkCreator;
