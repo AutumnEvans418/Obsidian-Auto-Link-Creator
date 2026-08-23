@@ -11,12 +11,25 @@ import {
 	AutoLinkSettings,
 	DEFAULT_SETTINGS,
 } from './settings';
+import { rootForm, singularize } from './nlp';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
 
 	async onload() {
 		await this.loadSettings();
+
+		// TEMP: verify nlp-compromise bundled + loads inside Obsidian. Remove when real UI landed.
+		this.addRibbonIcon('link', 'Test nlp-comprromise', () => {
+			new Notice(`nlp loaded. changed→${rootForm('changed')}. Cows→${singularize('Cows')}`);
+		});
+		this.addCommand({
+			id: 'test-nlp-load',
+			name: 'Test nlp-compromise loads',
+			callback: () => {
+				new Notice(`changed→${rootForm('changed')}. Cows→${singularize('Cows')}`);
+			},
+		});
 
 		// This creates an icon in the left ribbon.
 		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
