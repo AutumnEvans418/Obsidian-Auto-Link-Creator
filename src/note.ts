@@ -21,3 +21,12 @@ export function noteBody({ alias, aliases, content }: NoteFields): string {
 	const body = `${frontmatter(unique)}${content ?? ''}`.trimEnd();
 	return body ? `${body}\n` : '';
 }
+
+/** Append `content` to a note unless the identical block is already last. */
+export function mergeContent(cur: string, content: string): string {
+	if (!content) return cur;
+	const trimmed = cur.trimEnd();
+	if (!trimmed) return content;
+	if (trimmed === content || trimmed.endsWith(content)) return cur;
+	return `${trimmed}\n\n${content}`;
+}

@@ -9,6 +9,16 @@ export interface AutoLinkSettings {
 	ignoreCodeblocks: boolean;
 	/** Capitalize each first letter of note names and link text. */
 	capitalize: boolean;
+	/** Run keyword detection driven by `templates` lines. */
+	enableTemplateKeywords: boolean;
+	/** Run NLP keyword detection over note prose (repeated phrases, variants). */
+	enableNlpKeywords: boolean;
+	/** Extra comma-separated words NLP keyword detection drops. */
+	extraStopwords: string;
+	/** Open updated/appended notes in background leaves so native Ctrl-Z can undo. */
+	openForUndo: boolean;
+	/** Auto-link template keywords in the active note when it is saved. */
+	onSaveEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AutoLinkSettings = {
@@ -19,6 +29,11 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	],
 	ignoreCodeblocks: true,
 	capitalize: true,
+	enableTemplateKeywords: true,
+	enableNlpKeywords: true,
+	extraStopwords: '',
+	openForUndo: true,
+	onSaveEnabled: false,
 };
 
 const CODEBLOCK_HELP =
@@ -73,6 +88,49 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 			field!.inputEl.cols = 50;
 		});
 
+		new Setting(containerEl).setName('Keyword sources').setHeading();
+
+		new Setting(containerEl)
+			.setName('Template-based keywords')
+			.setDesc('Detect keywords from `{{Link ...}}` template lines.')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableTemplateKeywords)
+					.onChange(async (value) => {
+						this.plugin.settings.enableTemplateKeywords = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('NLP-based keywords')
+			.setDesc(
+				'Scan note prose for repeated, useful phrases (normalized: plural, singular, lemmatized forms grouped together).',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableNlpKeywords)
+					.onChange(async (value) => {
+						this.plugin.settings.enableNlpKeywords = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Extra stop words')
+			.setDesc(
+				'Comma-separated words for NLP keyword detection to ignore. E.g. project, team, feature',
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder('project, team, feature')
+					.setValue(this.plugin.settings.extraStopwords)
+					.onChange(async (value) => {
+						this.plugin.settings.extraStopwords = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		new Setting(containerEl)
 			.setName('Ignore code blocks')
 			.setDesc(CODEBLOCK_HELP)
@@ -81,6 +139,34 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.ignoreCodeblocks)
 					.onChange(async (value) => {
 						this.plugin.settings.ignoreCodeblocks = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Link on save')
+			.setDesc(
+				'Automatically convert template keywords to wiki links when a template-based-keyword note is saved. Idempotent: already-linked phrases are skipped.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.onSaveEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.onSaveEnabled = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Open files for undo')
+			.setDesc(
+				'Open notes that get content appended in background tabs (without changing the active note) so the built-in Undo can revert them.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.openForUndo)
+					.onChange(async (value) => {
+						this.plugin.settings.openForUndo = value;
 						await this.plugin.saveSettings();
 					}),
 			);

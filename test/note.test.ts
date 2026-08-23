@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { noteBody } from '../src/note.ts';
+import { mergeContent, noteBody } from '../src/note.ts';
 
 test('body with aliases adds frontmatter', () => {
 	assert.equal(
@@ -29,4 +29,18 @@ test('body without alias omits frontmatter', () => {
 
 test('body without content is empty', () => {
 	assert.equal(noteBody({ name: 'Empty' }), '');
+});
+
+test('mergeContent appends new content after blank line', () => {
+	assert.equal(mergeContent('a\nb', 'c'), 'a\nb\n\nc');
+});
+
+test('mergeContent skips content already present as last block', () => {
+	assert.equal(mergeContent('a\n\nhello', 'hello'), 'a\n\nhello');
+	assert.equal(mergeContent('hello', 'hello'), 'hello');
+});
+
+test('mergeContent skips empty content and empty base', () => {
+	assert.equal(mergeContent('a', ''), 'a');
+	assert.equal(mergeContent('', 'x'), 'x');
 });

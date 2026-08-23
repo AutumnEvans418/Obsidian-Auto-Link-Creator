@@ -1,5 +1,5 @@
 import { TFile, Vault } from 'obsidian';
-import { noteBody } from './note';
+import { mergeContent, noteBody } from './note';
 import type { NoteFields } from './note';
 import { titleCase } from './nlp';
 
@@ -41,6 +41,7 @@ export async function createNote(
 	folder: string,
 	f: NoteFields,
 	capitalize = true,
+	onWrite?: (path: string, content: string) => Promise<void>,
 ): Promise<{ path: string; created: boolean }> {
 	f = { ...f, name: capitalize ? titleCase(f.name) : f.name };
 	const canonical = folder ? `${folder}/${f.name}.md` : `${f.name}.md`;
@@ -48,8 +49,11 @@ export async function createNote(
 	const appendPath = async (path: string): Promise<{ path: string; created: boolean }> => {
 		if (f.content) {
 			const indexed = vault.getFileByPath(path);
-			if (indexed) await vault.modify(indexed, mergeContent(await vault.read(indexed), f.content));
-			else await vault.adapter.write(path, mergeContent(await vault.adapter.read(path), f.content));
+			const cur = indexed ? await vault.read(indexed) : await vault.adapter.read(path);
+			const merged = mergeContent(cur, f.content);
+			if (onWrite) await onWrite(path, merged);
+			else if (indexed) await vault.modify(indexed, merged);
+			else await vault.adapter.write(path, merged);
 		}
 		return { path, created: false };
 	};
@@ -70,7 +74,5 @@ export async function createNote(
 	}
 }
 
-function mergeContent(cur: string, content: string): string {
-	const merged = cur.trimEnd();
-	return merged ? `${merged}\n\n${content}` : content;
-}
+/** Append `content` unless the identical block is already the last block. */
+// mergeContent lives in note.ts (obsidian-free, unit-tested).

@@ -10,8 +10,23 @@ interface Props {
 
 let { suggestions, onApply, onCancel }: Props = $props();
 
-let items: Suggestion[] = $state([...suggestions]);
+const items: Suggestion[] = [...suggestions];
 let checked: boolean[] = $state(items.map(() => true));
+let sortBy: 'usage' | 'name' | 'longest' | 'shortest' = $state('usage');
+let query: string = $state('');
+
+const view = $derived(
+	[...items]
+		.map((s, i) => ({ s, i }))
+		.filter(({ s }) => s.name.toLowerCase().includes(query.trim().toLowerCase()))
+		.sort((a, b) => {
+			if (sortBy === 'usage')
+				return (b.s.count ?? 0) - (a.s.count ?? 0) || a.s.name.localeCompare(b.s.name);
+			if (sortBy === 'longest') return b.s.name.length - a.s.name.length;
+			if (sortBy === 'shortest') return a.s.name.length - b.s.name.length;
+			return a.s.name.localeCompare(b.s.name);
+		}),
+);
 
 let selectedCount = $derived(checked.filter(Boolean).length);
 
@@ -29,12 +44,31 @@ const excerpt = (content: string): string => {
 	<p class="alc-preview-empty">No template matches found in this note.</p>
 {:else}
 	<div class="alc-preview-toolbar">
+		<label class="alc-sort">
+			Sort
+			<select bind:value={sortBy}>
+				<option value="usage">Most used</option>
+				<option value="name">Name A–Z</option>
+				<option value="longest">Longest keyword</option>
+				<option value="shortest">Shortest keyword</option>
+			</select>
+		</label>
 		<button type="button" onclick={() => (checked = checked.map(() => true))}>Select all</button>
 		<button type="button" onclick={() => (checked = checked.map(() => false))}>Select none</button>
-		<span class="alc-preview-count">{selectedCount} / {items.length}</span>
+		<input
+			class="alc-search"
+			type="search"
+			placeholder="Filter…"
+			aria-label="Filter suggestions"
+			bind:value={query}
+		/>
+		<span class="alc-preview-selected">{selectedCount} / {items.length}</span>
 	</div>
+	{#if view.length === 0}
+		<p class="alc-preview-empty">No suggestions match "{query}".</p>
+	{:else}
 	<ul class="alc-preview-list">
-		{#each items as s, i}
+		{#each view as { s, i }}
 			<li>
 				<input
 					type="checkbox"
@@ -43,6 +77,12 @@ const excerpt = (content: string): string => {
 				/>
 				<div class="alc-preview-item">
 					<span class="alc-preview-name">{s.name}</span>
+					{#if s.count}
+						<span class="alc-preview-usage">used {s.count}&times;</span>
+					{/if}
+					{#if s.targetFolder !== undefined}
+						<span class="alc-preview-folder">→ {s.targetFolder || 'vault root'}</span>
+					{/if}
 					{#if s.aliases.length}
 						<span class="alc-preview-aliases">Aliases: {s.aliases.join(', ')}</span>
 					{/if}
@@ -53,6 +93,7 @@ const excerpt = (content: string): string => {
 			</li>
 		{/each}
 	</ul>
+	{/if}
 {/if}
 
 <div class="alc-preview-actions">
@@ -86,10 +127,33 @@ const excerpt = (content: string): string => {
 		align-items: center;
 		margin-bottom: 0.5em;
 	}
-	.alc-preview-count {
+	.alc-sort {
+		display: flex;
+		align-items: center;
+		gap: 0.35em;
+		font-size: 0.9em;
+		opacity: 0.8;
+	}
+	.alc-search {
+		flex: 1;
+		min-width: 6em;
+		height: 1.8em;
+		font-size: 0.9em;
+	}
+	.alc-preview-selected {
 		opacity: 0.7;
 		font-size: 0.9em;
 		margin-left: auto;
+	}
+	.alc-preview-usage {
+		opacity: 0.55;
+		font-size: 0.85em;
+	}
+	.alc-preview-folder {
+		opacity: 0.55;
+		font-size: 0.85em;
+		font-style: italic;
+		font-family: var(--font-monospace);
 	}
 	.alc-preview-list {
 		list-style: none;
