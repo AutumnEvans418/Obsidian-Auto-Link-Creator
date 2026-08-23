@@ -32,6 +32,30 @@ Read `PLAN.md` before implementing; it is the authoritative spec. Core workflows
   and `main.ts` is stale and should be renamed as part of real work. Note the
   circular import `settings.ts` ↔ `main.ts` (settings imports `MyPlugin` only for typing).
 
+## Build checklist
+
+Implemented one at a time; tick off as done. Each item is small enough to verify
+in Obsidian (reload plugin → run command/settings) **and** unit-tested where it
+contains pure logic (via `npm test`, `node --test` — no framework). Pure logic
+goes in obsidian-free modules under `src/` alongside `validation.ts`, then is
+imported by the plugin files.
+
+- [ ] Template parser: match a line vs configured templates → `ParsedTemplate {name, alias, content}`
+- [ ] Title casing: capitalize each first letter of Link Name
+- [ ] Pluralization: singularize/pluralize English nouns (`Cow`⇄`Cows`, `Party`⇄`Parties`)
+- [ ] Lemmatization: basic verb forms (`Changed`/`Changing` → `Change`)
+- [ ] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word
+- [ ] Link detector: skip phrases already inside `[[...]]`
+- [ ] Link builder: `[[Name|Alias]]` + note content with alias frontmatter
+- [ ] Keyword extractor: tokenize, strip stop-words/punctuation, frequency count
+- [ ] Note creator: write `.md` from `ParsedTemplate` (name, content, alias frontmatter)
+- [ ] File scanner: scan one MarkdownFile via formats → list of link actions
+- [ ] Process-single-file command + on-save trigger
+- [ ] Process-whole-vault command
+- [ ] Preview modal: suggested links, select/apply before committing
+- [ ] Collision guard: skip if note with same name/alias exists (sibling-plugin compat)
+- [ ] Settings tab: add relative-link, auto-create-note, capitalize toggles
+
 ## Commands (npm)
 
 ```bash
