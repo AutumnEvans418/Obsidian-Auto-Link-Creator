@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "obsidian-automatic-link-creator",
+	"name": "Auto Link Creator",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
+	"minAppVersion": "1.1.0",
+	"description": "A linker that automatically creates obsidian links based on formatting, templates, word count, and NLP algorithms. Unlike other linkers that only updates notes with existing links. Suggests links based on the entire vault. Supports aliases. Works great with obsidian-automatic-linker",
+	"author": "Autumn Fox",
+	"authorUrl": "https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator",
 	"fundingUrl": "https://obsidian.md/pricing",
 	"isDesktopOnly": false
 }

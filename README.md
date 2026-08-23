@@ -1,5 +1,13 @@
 # Obsidian Sample Plugin
 
+```
+this.app.emulateMobile(true);
+```
+> The Node.js API, and the Electron API aren't available on mobile devices. Any calls to these libraries made by your plugin or it's dependencies can cause your plugin to crash.
+
+- https://docs.obsidian.md/Plugins/Getting+started/Use+Svelte+in+your+plugin
+- https://docs.obsidian.md/Plugins/Editor/Editor+extensions
+
 This is a sample plugin for Obsidian (https://obsidian.md).
 
 This project uses TypeScript to provide type checking and documentation.
