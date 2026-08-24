@@ -16,6 +16,14 @@ export interface AutoLinkSettings {
 	openForUndo: boolean;
 	/** Auto-link template keywords in the active note when it is saved. */
 	onSaveEnabled: boolean;
+	/** Show provenance details (source, template, nlp root) in the preview. */
+	debug: boolean;
+	/** Link phrases that match existing note names or aliases. */
+	enableExistingLinks: boolean;
+	/** How phrases match notes: exact name/alias text, or nlp root/variant forms. */
+	existingMatchMode: 'exact' | 'root';
+	/** Auto-link existing-note matches when the active note is saved. */
+	existingOnSave: boolean;
 }
 
 export const DEFAULT_SETTINGS: AutoLinkSettings = {
@@ -31,4 +39,8 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	extraStopwords: '',
 	openForUndo: true,
 	onSaveEnabled: false,
+	debug: false,
+	enableExistingLinks: true,
+	existingMatchMode: 'exact',
+	existingOnSave: false,
 };

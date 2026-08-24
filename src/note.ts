@@ -26,6 +26,31 @@ export function noteBody({ alias, aliases, content }: NoteFields): string {
  * Add missing aliases to an existing note's frontmatter. No-op when the note
  * has no YAML frontmatter (or no `aliases` list) or every alias is present.
  */
+/** Aliases listed in a note's frontmatter (`aliases:` YAML list); [] when none. */
+export function parseFrontmatterAliases(doc: string): string[] {
+	const fm = /^---\n([\s\S]*?)\n---/.exec(doc);
+	if (!fm) return [];
+	const out: string[] = [];
+	let inAliases = false;
+	for (const line of (fm[1] ?? '').split('\n')) {
+		if (/^aliases:\s*(\[.*\])?\s*$/.test(line.trim())) {
+			inAliases = true;
+			const inline = /^\s*aliases:\s*\[(.*)\]\s*$/.exec(line);
+			if (inline?.[1])
+				out.push(...inline[1].split(',').map((a) => a.trim().replace(/^['"]|['"]$/g, '')));
+			continue;
+		}
+		if (!inAliases) continue;
+		if (/^\s+\S/.test(line)) {
+			const v = /^\s*-\s*(.+)$/.exec(line);
+			if (v) out.push(v[1]!.trim().replace(/^['"]|['"]$/g, ''));
+		} else if (line.trim()) {
+			inAliases = false;
+		}
+	}
+	return out.filter(Boolean);
+}
+
 export function mergeAliasesIntoDoc(cur: string, newAliases: string[]): string {
 	const keep = [...new Set(newAliases)].filter(Boolean);
 	if (!keep.length) return cur;

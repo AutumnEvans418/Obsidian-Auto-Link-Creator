@@ -1,6 +1,8 @@
 import { collectSuggestions } from "../collectSuggestions.ts";
 import { collectVaultSuggestions } from "../collectVaultSuggestions.ts";
 import { createNote } from "../creator.ts";
+import { applyExistingLinks, buildNoteIndex } from "../existingLinks.ts";
+import type { IndexEntry } from "../existingLinks.ts";
 import { applyLinks } from "../link.ts";
 import { rootForm } from "../nlp.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
@@ -145,4 +147,34 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 			`Created ${created}, appended ${appended}. Linked ${linked} keyword(s).`,
 		);
 	});
+}
+
+/** Link plain-text phrases to existing notes (by name/alias) in the active doc. */
+export function linkExistingNotes(plugin: IPlugin): void {
+	if (!plugin.settings.enableExistingLinks) {
+		plugin.notice('Linking existing notes is disabled in settings.');
+		return;
+	}
+	const source = plugin.source();
+	const excludeBasename = source.split('/').pop()?.replace(/\.md$/i, '');
+	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
+		path: f.path,
+		basename: f.basename,
+		aliases: plugin.noteAliases(f.path),
+	}));
+	const index = buildNoteIndex(entries, plugin.settings.existingMatchMode);
+	if (!index.size) {
+		plugin.notice('No notes found to link.');
+		return;
+	}
+	const res = applyExistingLinks(plugin.value(), index, {
+		capitalize: plugin.settings.capitalize,
+		excludeBasename,
+	});
+	if (!res.count) {
+		plugin.notice('No existing-note matches found.');
+		return;
+	}
+	plugin.set(res.updated);
+	plugin.notice(`Linked ${res.count} occurrence(s) to existing notes.`);
 }

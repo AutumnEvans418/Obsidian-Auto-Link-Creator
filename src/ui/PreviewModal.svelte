@@ -6,12 +6,14 @@ interface Props {
 	suggestions: Suggestion[];
 	onApply: (indices: number[]) => void;
 	onCancel: () => void;
+	/** Show provenance rows (source file/line, template, nlp root). */
+	debug?: boolean;
 }
 
-let { suggestions, onApply, onCancel }: Props = $props();
+let { suggestions, onApply, onCancel, debug = false }: Props = $props();
 
 const items: Suggestion[] = [...suggestions];
-let checked: boolean[] = $state(items.map(() => true));
+let checked: boolean[] = $state(items.map(() => false));
 let sortBy: 'usage' | 'name' | 'longest' | 'shortest' = $state('usage');
 let query: string = $state('');
 
@@ -83,28 +85,28 @@ const excerpt = (content: string): string => {
 					{#if s.targetFolder !== undefined}
 						<span class="alc-preview-folder">→ {s.targetFolder || 'vault root'}</span>
 					{/if}
-					{#if s.sources?.length}
+					{#if debug && s.sources?.length}
 						<span class="alc-preview-sources" title={s.sources.join('\n')}>
 							in {s.sources.slice(0, 3).join(', ')}{s.sources.length > 3
 								? ` +${s.sources.length - 3} more`
 								: ''}
 						</span>
 					{/if}
-					{#if s.templates?.length}
+					{#if debug && s.templates?.length}
 						<span class="alc-preview-template" title={s.templates.join('\n')}>
 							template: {s.templates[0]}{s.templates.length > 1
 								? ` (+${s.templates.length - 1})`
 								: ''}
 						</span>
 					{/if}
-					{#if s.nlpRoot}
+					{#if debug && s.nlpRoot}
 						<span class="alc-preview-nlp">
 							nlp root "{s.nlpRoot}"{s.aliases.length
 								? ` · variants: ${s.aliases.join(', ')}`
 								: ''}
 						</span>
 					{/if}
-					{#if s.aliases.length && !s.nlpRoot}
+					{#if !debug && s.aliases.length}
 						<span class="alc-preview-aliases">Aliases: {s.aliases.join(', ')}</span>
 					{/if}
 					{#if s.content}

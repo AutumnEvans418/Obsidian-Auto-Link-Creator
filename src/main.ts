@@ -11,6 +11,7 @@ import { AutoLinkSettingTab, DEFAULT_SETTINGS } from './settings.ts';
 import type { AutoLinkSettings } from './settings.ts';
 import { PreviewSuggestModal } from './PreviewSuggestModal.ts';
 import {
+	linkExistingNotes,
 	linkTemplateKeywords,
 	processFileAndPreview,
 	processVaultAndPreview,
@@ -64,6 +65,13 @@ export default class AutoLinkCreator extends Plugin {
 			markdownFiles: () => app.vault.getMarkdownFiles(),
 			getFiles: async (f) => (await app.vault.adapter.list(f)).files,
 			getFileByPath: tFileAt,
+			noteAliases: (path) => {
+				const f = tFileAt(path);
+				const fm = f ? app.metadataCache.getFileCache(f)?.frontmatter : undefined;
+				const a: unknown = fm?.['aliases'];
+				if (!a) return [];
+				return (Array.isArray(a) ? a : [a]).map(String).filter(Boolean);
+			},
 			read: (f) =>
 				typeof f === 'string'
 					? app.vault.adapter.read(f)
@@ -92,7 +100,7 @@ export default class AutoLinkCreator extends Plugin {
 				};
 			},
 			preview: (suggestions, onApply) => {
-				new PreviewSuggestModal(app, suggestions, onApply).open();
+				new PreviewSuggestModal(app, suggestions, onApply, readSettings().debug).open();
 			},
 		};
 	}
@@ -109,17 +117,18 @@ export default class AutoLinkCreator extends Plugin {
 			this.originalSaveCallback = saveCallback;
 			this.wrappedSaveCallback = (checking: boolean) => {
 				const res = saveCallback(checking);
-				if (
-					!checking &&
-					this.settings.onSaveEnabled &&
-					this.settings.enableTemplateKeywords
-				) {
+				if (!checking) {
 					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-					if (view)
-						linkTemplateKeywords(
-							this.facade(view.editor, view.file?.path ?? ''),
-							true,
-						);
+					if (view) {
+						const facade = this.facade(view.editor, view.file?.path ?? '');
+						if (
+							this.settings.onSaveEnabled &&
+							this.settings.enableTemplateKeywords
+						)
+							linkTemplateKeywords(facade, true);
+						if (this.settings.existingOnSave && this.settings.enableExistingLinks)
+							linkExistingNotes(facade);
+					}
 				}
 				return res;
 			};
@@ -145,6 +154,15 @@ export default class AutoLinkCreator extends Plugin {
 			},
 		});
 
+		// Link plain-text phrases that match existing note names/aliases.
+		this.addCommand({
+			id: 'link-existing-notes',
+			name: 'Link existing notes in current file',
+			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				linkExistingNotes(this.facade(editor, ctx.file?.path ?? ''));
+			},
+		});
+
 		// Preview suggested notes across the whole vault, creating each in its
 		// closest shared folder.
 		this.addCommand({
@@ -155,9 +173,18 @@ export default class AutoLinkCreator extends Plugin {
 			},
 		});
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
+		// Status bar trigger for the current-file preview (not available on mobile).
 		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		statusBarItemEl.setText('Auto link preview');
+		statusBarItemEl.addClass('auto-link-statusbar');
+		this.registerDomEvent(statusBarItemEl, 'click', () => {
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!view) {
+				new Notice('Auto link creator: no active Markdown file');
+				return;
+			}
+			processFileAndPreview(this.facade(view.editor, view.file?.path ?? ''));
+		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new AutoLinkSettingTab(this.app, this));

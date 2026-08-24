@@ -40,6 +40,7 @@ function fakePlugin(opts: {
 			})),
 		getFiles: async () => [...files.keys()],
 		getFileByPath: (p) => (files.has(p) ? ({ path: p } as never) : null),
+		noteAliases: () => [],
 		read: async (f) =>
 			files.get(typeof f === 'string' ? f : f.path) ?? '',
 		write: async (p, data) => {

@@ -154,6 +154,66 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl)
+			.setName('Debug details in preview')
+			.setDesc(
+				'Show provenance for each suggestion: source file/line, matched template, and nlp root.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.debug)
+					.onChange(async (value) => {
+						this.plugin.settings.debug = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl).setName('Existing notes').setHeading();
+
+		new Setting(containerEl)
+			.setName('Link existing notes')
+			.setDesc(
+				'Link phrases that match an existing note name or alias (from the metadata cache) to that note.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enableExistingLinks)
+					.onChange(async (value) => {
+						this.plugin.settings.enableExistingLinks = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Match mode')
+			.setDesc(
+				'Exact: only the note name/alias text matches. NLP root: plural/singular/lemmatized variants match too (e.g. "cows" links to "Cow").',
+			)
+			.addDropdown((drop) =>
+				drop
+					.addOption('exact', 'Exact')
+					.addOption('root', 'NLP root')
+					.setValue(this.plugin.settings.existingMatchMode)
+					.onChange(async (value) => {
+						this.plugin.settings.existingMatchMode = value as 'exact' | 'root';
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Link existing notes on save')
+			.setDesc(
+				'Automatically link existing-note matches when a note is saved. Idempotent: already-linked phrases are skipped.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.existingOnSave)
+					.onChange(async (value) => {
+						this.plugin.settings.existingOnSave = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		new Setting(containerEl).addExtraButton((btn) =>
 			btn
 				.setIcon('plus')

@@ -9,7 +9,8 @@ export class PreviewSuggestModal extends Modal {
 	constructor(
 		app: App,
 		private suggestions: Suggestion[],
-		private onApply: (indices: number[]) => Promise<void>
+		private onApply: (indices: number[]) => Promise<void>,
+		private debug = false,
 	) {
 		super(app);
 	}
@@ -21,6 +22,7 @@ export class PreviewSuggestModal extends Modal {
 			target: contentEl,
 			props: {
 				suggestions: this.suggestions,
+				debug: this.debug,
 				onApply: (indices: number[]) => {
 					void this.onApply(indices)
 						.then(() => this.close())
