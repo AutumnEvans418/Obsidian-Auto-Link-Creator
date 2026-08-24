@@ -1,86 +1,144 @@
-import { collectSuggestions } from "../collectSuggestions";
-import { createNote } from "../creator";
-import { applyLinks } from "../link";
-import { makeUndoableWrite } from "../makeUndoableWrite";
-import { nlpSuggestions } from "../nlpSuggestions";
-import { PreviewSuggestModal } from "../PreviewSuggestModal";
-import type { AutoLinkSettings } from "../settings";
-import { findAllByTemplates, type ParsedTemplate } from "../template";
-import type { Suggestion } from "../ui/suggestion";
-import type { IPlugin } from "./ipluginInterface";
+import { collectSuggestions } from "../collectSuggestions.ts";
+import { collectVaultSuggestions } from "../collectVaultSuggestions.ts";
+import { createNote } from "../creator.ts";
+import { applyLinks } from "../link.ts";
+import { rootForm } from "../nlp.ts";
+import { nlpSuggestions } from "../nlpSuggestions.ts";
+import { findAllByTemplates } from "../template.ts";
+import type { ParsedTemplate } from "../template.ts";
+import type { Suggestion } from "../ui/suggestion.ts";
+import type { IPlugin } from "./ipluginInterface.ts";
 
-export function onSave() {
-
-}
-
-/** Rewrite template keyword lines in `editor` into wiki links, idempotently. */
+/** Rewrite template keyword lines in `plugin`'s doc into wiki links, idempotently. */
 export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
-    const doc = plugin.value();
-    const hits = findAllByTemplates(doc, plugin.settings.templates, {
-        ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
-    });
-    if (!hits.length) {
-        if (!quiet) plugin.notice('No template matches found.');
-        return;
-    }
-    plugin.set(applyLinks(doc, hits, plugin.settings.capitalize));
-    plugin.notice(`Linked ${hits.length} keyword(s).`);
+	const doc = plugin.value();
+	const hits = findAllByTemplates(doc, plugin.settings.templates, {
+		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
+	});
+	if (!hits.length) {
+		if (!quiet) plugin.notice('No template matches found.');
+		return;
+	}
+	plugin.set(applyLinks(doc, hits, plugin.settings.capitalize));
+	plugin.notice(`Linked ${hits.length} keyword(s).`);
 }
 
-export function processFileAndPreview(plugin: IPlugin) {
-    const doc = plugin.value();
-    const folder = plugin.folder();
-    const suggestions: Suggestion[] = [];
-    if (plugin.settings.enableTemplateKeywords) {
-        suggestions.push(
-            ...collectSuggestions(
-                findAllByTemplates(doc, plugin.settings.templates, {
-                    ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
-                }),
-            ),
-        );
-    }
-    if (plugin.settings.enableNlpKeywords) {
-        const extra = plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
-        suggestions.push(...nlpSuggestions(doc, extra));
-    }
-    if (!suggestions.length) {
-        plugin.notice('No keyword matches found.');
-        return;
-    }
-    const modal = new PreviewSuggestModal(this.app, suggestions, async (indices) => {
-        let created = 0;
-        let appended = 0;
-        const toLink: ParsedTemplate[] = [];
-        const onWrite = plugin.settings.openForUndo
-            ? makeUndoableWrite(this.app)
-            : undefined;
-        for (const i of indices) {
-            const s = suggestions[i];
-            if (!s) continue;
-            for (const h of s.hits) toLink.push(h);
-            try {
-                const res = await createNote(
-                    plugin,
-                    folder,
-                    { name: s.name, content: s.content, aliases: s.aliases },
-                    plugin.settings.capitalize,
-                    onWrite,
-                );
-                if (res.created) created++;
-                else appended++;
-            } catch (err) {
-                plugin.notice(`Auto Link Creator error: ${String(err)}`);
-            }
-        }
-        if (toLink.length) {
-            plugin.set(applyLinks(plugin.value(), toLink, plugin.settings.capitalize));
-            plugin.notice(
-                `Created ${created}, appended ${appended}. Linked ${toLink.length} keyword(s).`,
-            );
-        } else {
-            plugin.notice(`Created ${created}, appended ${appended}.`);
-        }
-    });
-    modal.open();
+/** Preview suggestions for the active file; applying creates notes + links. */
+export function processFileAndPreview(plugin: IPlugin): void {
+	const doc = plugin.value();
+	const folder = plugin.folder();
+	const suggestions: Suggestion[] = [];
+	if (plugin.settings.enableTemplateKeywords) {
+		suggestions.push(
+			...collectSuggestions(
+				findAllByTemplates(doc, plugin.settings.templates, {
+					ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
+				}),
+			),
+		);
+	}
+	if (plugin.settings.enableNlpKeywords) {
+		const extra = plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
+		suggestions.push(...nlpSuggestions(doc, extra));
+	}
+	if (!suggestions.length) {
+		plugin.notice('No keyword matches found.');
+		return;
+	}
+	plugin.preview(suggestions, async (indices) => {
+		let created = 0;
+		let appended = 0;
+		const toLink: ParsedTemplate[] = [];
+		const onWrite = plugin.undoableWriter();
+		for (const i of indices) {
+			const s = suggestions[i];
+			if (!s) continue;
+			for (const h of s.hits) toLink.push(h);
+			try {
+				const res = await createNote(
+					plugin,
+					folder,
+					{ name: s.name, content: s.content, aliases: s.aliases },
+					plugin.settings.capitalize,
+					onWrite,
+				);
+				if (res.created) created++;
+				else appended++;
+			} catch (err) {
+				plugin.notice(`Auto Link Creator error: ${String(err)}`);
+			}
+		}
+		if (toLink.length) {
+			plugin.set(applyLinks(plugin.value(), toLink, plugin.settings.capitalize));
+			plugin.notice(
+				`Created ${created}, appended ${appended}. Linked ${toLink.length} keyword(s).`,
+			);
+		} else {
+			plugin.notice(`Created ${created}, appended ${appended}.`);
+		}
+	});
+}
+
+/** Scan every markdown file, preview vault-wide suggestions, apply on select. */
+export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
+	const suggestions = await collectVaultSuggestions(plugin, plugin.settings);
+	if (!suggestions.length) {
+		plugin.notice('No keyword matches found in the vault.');
+		return;
+	}
+	plugin.preview(suggestions, async (indices) => {
+		const onWrite = plugin.undoableWriter();
+		let created = 0;
+		let appended = 0;
+		const selected = indices
+			.map((i) => suggestions[i])
+			.filter((s): s is Suggestion => !!s);
+		for (const s of selected) {
+			try {
+				const res = await createNote(
+					plugin,
+					s.targetFolder ?? '',
+					{ name: s.name, content: s.content, aliases: s.aliases },
+					plugin.settings.capitalize,
+					onWrite,
+				);
+				if (res.created) created++;
+				else appended++;
+			} catch (err) {
+				plugin.notice(`Auto Link Creator error: ${String(err)}`);
+			}
+		}
+		let linked = 0;
+		if (plugin.settings.enableTemplateKeywords) {
+			// Link each selected template suggestion's lines in every file.
+			const targetByRoot = new Map<string, string>();
+			for (const s of selected) {
+				if (s.hits.length)
+					targetByRoot.set(rootForm(s.name.toLowerCase()), s.name);
+			}
+			if (targetByRoot.size) {
+				for (const file of plugin.markdownFiles()) {
+					const doc = await plugin.read(file.path);
+					const hits = findAllByTemplates(
+						doc,
+						plugin.settings.templates,
+						{ ignoreCodeblocks: plugin.settings.ignoreCodeblocks },
+					).filter((h) => targetByRoot.has(rootForm(h.name.toLowerCase())));
+					if (!hits.length) continue;
+					for (const h of hits) {
+						const t = targetByRoot.get(rootForm(h.name.toLowerCase()));
+						if (t && t !== h.name && !h.target) h.target = t;
+					}
+					const updated = applyLinks(doc, hits, plugin.settings.capitalize);
+					if (updated === doc) continue;
+					if (onWrite) await onWrite(file.path, updated);
+					else await plugin.write(file.path, updated);
+					linked += hits.length;
+				}
+			}
+		}
+		plugin.notice(
+			`Created ${created}, appended ${appended}. Linked ${linked} keyword(s).`,
+		);
+	});
 }

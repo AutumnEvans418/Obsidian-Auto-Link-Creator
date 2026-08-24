@@ -1,4 +1,4 @@
-import type { ParsedTemplate } from '../template';
+import type { ParsedTemplate } from '../template.ts';
 
 export interface Suggestion {
 	name: string;
@@ -12,10 +12,4 @@ export interface Suggestion {
 	sourceFiles?: string[];
 	/** Resolved folder to create the note in (vault-wide scan). */
 	targetFolder?: string;
-}
-
-interface Props {
-	suggestions: Suggestion[];
-	onApply: (indices: number[]) => void;
-	onCancel: () => void;
 }

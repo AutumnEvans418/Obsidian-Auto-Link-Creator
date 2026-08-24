@@ -5,7 +5,10 @@ import nlp from 'compromise';
  * `changed`/`changing` → `change`, `went` → `go`, `children` → `child`.
  */
 export function rootForm(word: string): string {
-	return nlp(word).compute('root').json()[0]?.terms[0]?.root ?? word;
+	const json = nlp(word).compute('root').json() as Array<{
+		terms?: Array<{ root?: string }>;
+	}>;
+	return json[0]?.terms?.[0]?.root ?? word;
 }
 
 /**
@@ -15,8 +18,8 @@ export function rootForm(word: string): string {
  */
 function inflectNoun(word: string, makePlural: boolean): string {
 	const nouns = nlp(`the ${word}`).nouns();
-	const out = (makePlural ? nouns.toPlural() : nouns.toSingular())
-		.out('text')
+	const inflected = makePlural ? nouns.toPlural() : nouns.toSingular();
+	const out = String(inflected.out('text') ?? '')
 		.trim()
 		.replace(/^the\s+/i, '');
 	return out || word;

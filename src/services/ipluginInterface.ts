@@ -1,21 +1,50 @@
 import type { OpenViewState, TFile } from "obsidian";
-import type { AutoLinkSettings } from "../settings";
+import type { AutoLinkSettings } from "../settingsSchema.ts";
+import type { Suggestion } from "../ui/suggestion.ts";
 
+/** Minimal editor surface (Obsidian's Editor satisfies this). */
+export interface IEditorView {
+	getValue(): string;
+	setValue(content: string): void;
+}
+
+/**
+ * Obsidian-free facade over the App/workspace APIs the command services use.
+ * `main.ts` supplies the real implementation; unit tests supply fakes.
+ * Only `import type` may appear here so services stay runnable under
+ * `node --test`.
+ */
 export interface IPlugin {
-    value(): string;
-    set: (value: string) => void;
-    notice: (msg: string) => void;
-    settings: AutoLinkSettings;
-    folder(): string;
-    getFiles(folder: string): Promise<string[]>
-    getFileByPath(path: string): TFile | null;
-    read(normalizedPath: string): Promise<string>;
-    read(normalizedPath: TFile): Promise<string>;
-    write(normalizedPath: string, data: string): Promise<void>;
-    modify(file: TFile, append: string): Promise<void>;
-    create(path: string, data: string): Promise<TFile>;
-    openFile(file: TFile, openState?: OpenViewState): Promise<IPlugin>; //			const leaf = app.workspace.getLeaf(false); 			await leaf.openFile(file, { active: false });             view = leaf.view as MarkdownView;			views.set(path, view);
-    getFile(path: string): IPlugin
-    
-    
+	/** Active editor document text ('' when no editor is attached). */
+	value(): string;
+	set(content: string): void;
+	notice(msg: string): void;
+	readonly settings: AutoLinkSettings;
+	/** Folder of the active file; '' = vault root. */
+	folder(): string;
+
+	// --- vault ---
+	markdownFiles(): { path: string; basename: string }[];
+	/** Raw paths under `folder` (includes files not yet indexed). */
+	getFiles(folder: string): Promise<string[]>;
+	getFileByPath(path: string): TFile | null;
+	read(fileOrPath: TFile | string): Promise<string>;
+	write(path: string, data: string): Promise<void>;
+	modify(file: TFile, data: string): Promise<void>;
+	create(path: string, data: string): Promise<TFile>;
+
+	// --- workspace ---
+	openFile(file: TFile, state?: OpenViewState): Promise<IEditorView>;
+	/**
+	 * onWrite hook that routes writes through a non-focusing open editor so
+	 * Obsidian records native undo steps; undefined when disabled.
+	 */
+	undoableWriter():
+		| ((path: string, content: string) => Promise<void>)
+		| undefined;
+	/** Show the preview modal; onApply receives selected suggestion indices. */
+	preview(
+		suggestions: Suggestion[],
+		onApply: (indices: number[]) => Promise<void>,
+	): void;
 }

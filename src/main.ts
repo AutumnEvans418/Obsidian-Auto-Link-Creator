@@ -3,37 +3,93 @@ import {
 	MarkdownView,
 	Notice,
 	Plugin,
+	TFile,
 	type MarkdownFileInfo,
+	type OpenViewState,
 } from 'obsidian';
-import { AutoLinkSettingTab, DEFAULT_SETTINGS } from './settings';
-import type { AutoLinkSettings } from './settings';
-import { rootForm, singularize } from './nlp';
-import { findAllByTemplates } from './template';
-import type { ParsedTemplate } from './template';
-import { applyLinks } from './link';
-import { createNote } from './creator';
-import type { Suggestion } from './ui/suggestion';
-import { PreviewSuggestModal } from './PreviewSuggestModal';
-import { collectSuggestions } from './collectSuggestions';
-import { collectVaultSuggestions } from './collectVaultSuggestions';
-import { makeUndoableWrite } from './makeUndoableWrite';
-import { nlpSuggestions } from './nlpSuggestions';
-import { linkTemplateKeywords, processFileAndPreview } from './services/commandService';
-import type { IPlugin } from './services/ipluginInterface';
+import { AutoLinkSettingTab, DEFAULT_SETTINGS } from './settings.ts';
+import type { AutoLinkSettings } from './settings.ts';
+import { PreviewSuggestModal } from './PreviewSuggestModal.ts';
+import {
+	linkTemplateKeywords,
+	processFileAndPreview,
+	processVaultAndPreview,
+} from './services/commandService.ts';
+import type { IEditorView, IPlugin } from './services/ipluginInterface.ts';
 
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
-	private originalSaveCallback: ((checking: boolean) => any) | undefined;
-	private wrappedSaveCallback: ((checking: boolean) => any) | undefined;
+	private originalSaveCallback: ((checking: boolean) => boolean | void) | undefined;
+	private wrappedSaveCallback: ((checking: boolean) => boolean | void) | undefined;
 
-	pluginInterface(editor: Editor, ctx: MarkdownView | MarkdownFileInfo): IPlugin {
+	/**
+	 * Obsidian-backed implementation of the service facade. Everything
+	 * Obsidian-specific lives here; services stay unit-testable.
+	 */
+	private facade(
+		editor?: IEditorView,
+		folder = '',
+	): IPlugin {
+		const app = this.app;
+		const readSettings = () => this.settings;
+		const openInLeaf = async (
+			file: TFile,
+			state?: OpenViewState,
+		): Promise<IEditorView> => {
+			const leaf = app.workspace.getLeaf(false);
+			await leaf.openFile(file, state ?? { active: false });
+			const view = leaf.view;
+			if (!(view instanceof MarkdownView))
+				throw new Error(`Opened ${file.path}: not a markdown view`);
+			return view.editor;
+		};
+		const tFileAt = (path: string): TFile | null => {
+			const f = app.vault.getAbstractFileByPath(path);
+			return f instanceof TFile ? f : null;
+		};
 		return {
-			value: editor.getValue(),
-			set: v => editor.setValue(v),
-			notice: msg => new Notice(msg),
-			settings: this.settings,
-			folder: ctx.file ? ctx.file.parent?.path ?? '' : '',
-		}
+			value: () => editor?.getValue() ?? '',
+			set: (content) => editor?.setValue(content),
+			notice: (msg) => new Notice(msg),
+			get settings() {
+				return readSettings();
+			},
+			folder: () => folder,
+
+			markdownFiles: () => app.vault.getMarkdownFiles(),
+			getFiles: async (f) => (await app.vault.adapter.list(f)).files,
+			getFileByPath: tFileAt,
+			read: (f) =>
+				typeof f === 'string'
+					? app.vault.adapter.read(f)
+					: app.vault.cachedRead(f),
+			write: async (path, data) => {
+				const existing = app.vault.getAbstractFileByPath(path);
+				if (existing instanceof TFile) await app.vault.modify(existing, data);
+				else await app.vault.create(path, data);
+			},
+			modify: (file, data) => app.vault.modify(file, data),
+			create: (path, data) => app.vault.create(path, data),
+
+			openFile: openInLeaf,
+			undoableWriter: () => {
+				if (!readSettings().openForUndo) return undefined;
+				const views = new Map<string, IEditorView>();
+				return async (path, content) => {
+					let ed = views.get(path);
+					if (!ed) {
+						const file = tFileAt(path);
+						if (!file) return;
+						ed = await openInLeaf(file, { active: false });
+						views.set(path, ed);
+					}
+					ed.setValue(content);
+				};
+			},
+			preview: (suggestions, onApply) => {
+				new PreviewSuggestModal(app, suggestions, onApply).open();
+			},
+		};
 	}
 
 	async onload() {
@@ -54,7 +110,11 @@ export default class AutoLinkCreator extends Plugin {
 					this.settings.enableTemplateKeywords
 				) {
 					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-					if (view) linkTemplateKeywords(this.pluginInterface(view.editor, view), true);
+					if (view)
+						linkTemplateKeywords(
+							this.facade(view.editor, view.file?.parent?.path ?? ''),
+							true,
+						);
 				}
 				return res;
 			};
@@ -67,7 +127,7 @@ export default class AutoLinkCreator extends Plugin {
 			name: 'Process current file without preview',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				if (!this.settings.enableTemplateKeywords) return;
-				linkTemplateKeywords(this.pluginInterface(editor, ctx));
+				linkTemplateKeywords(this.facade(editor, ctx.file?.parent?.path ?? ''));
 			},
 		});
 
@@ -76,7 +136,7 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'preview-create-notes',
 			name: 'Process current file and preview links',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-				processFileAndPreview(this.pluginInterface(editor, ctx));
+				processFileAndPreview(this.facade(editor, ctx.file?.parent?.path ?? ''));
 			},
 		});
 
@@ -86,74 +146,7 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'process-whole-vault',
 			name: 'Process whole vault and preview links',
 			callback: () => {
-				void (async () => {
-					const suggestions = await collectVaultSuggestions(this.app, this.settings);
-					if (!suggestions.length) {
-						new Notice('No keyword matches found in the vault.');
-						return;
-					}
-					const modal = new PreviewSuggestModal(this.app, suggestions, async (indices) => {
-						const onWrite = this.settings.openForUndo
-							? makeUndoableWrite(this.app)
-							: undefined;
-						let created = 0;
-						let appended = 0;
-						for (const i of indices) {
-							const s = suggestions[i];
-							if (!s) continue;
-							try {
-								const res = await createNote(
-									this.app.vault,
-									s.targetFolder ?? '',
-									{ name: s.name, content: s.content, aliases: s.aliases },
-									this.settings.capitalize,
-									onWrite,
-								);
-								if (res.created) created++;
-								else appended++;
-							} catch (err) {
-								new Notice(`Auto Link Creator error: ${String(err)}`);
-							}
-						}
-						let linked = 0;
-						if (this.settings.enableTemplateKeywords) {
-							// Link each selected template suggestion's lines in the
-							// files that use them.
-							const selected = indices
-								.map((i) => suggestions[i])
-								.filter((s) => s && s.hits.length);
-							const toLink = new Set(selected.map((s) => rootForm(s!.name.toLowerCase())));
-							const nameByRoot = new Map(
-								selected.map((s) => [rootForm(s!.name.toLowerCase()), s!.name]),
-							);
-							if (toLink.size) {
-								for (const file of this.app.vault.getMarkdownFiles()) {
-									const doc = await this.app.vault.read(file);
-									const hits = findAllByTemplates(doc, this.settings.templates, {
-										ignoreCodeblocks: this.settings.ignoreCodeblocks,
-									})
-										.map((h) => {
-											const root = rootForm(h.name.toLowerCase());
-											if (toLink.has(root)) {
-												const target = nameByRoot.get(root);
-												if (target && target !== h.name) h.target = target;
-											}
-											return h;
-										})
-										.filter((h) => toLink.has(rootForm(h.name.toLowerCase())));
-									if (!hits.length) continue;
-									const updated = applyLinks(doc, hits, this.settings.capitalize);
-									if (updated === doc) continue;
-									if (onWrite) await onWrite(file.path, updated);
-									else await this.app.vault.modify(file, updated);
-									linked += hits.length;
-								}
-							}
-						}
-						new Notice(`Created ${created}, appended ${appended}. Linked ${linked} keyword(s).`);
-					});
-					modal.open();
-				})();
+				void processVaultAndPreview(this.facade());
 			},
 		});
 
@@ -186,5 +179,3 @@ export default class AutoLinkCreator extends Plugin {
 		await this.saveData(this.settings);
 	}
 }
-
-

@@ -1,5 +1,5 @@
-import { type ParsedTemplate, groupByReference, groupContent } from './template';
-import type { Suggestion } from './ui/suggestion';
+import { type ParsedTemplate, groupByReference, groupContent } from './template.ts';
+import type { Suggestion } from './ui/suggestion.ts';
 
 export function collectSuggestions(hits: ParsedTemplate[]): Suggestion[] {
 	return groupByReference(hits).map((group) => {

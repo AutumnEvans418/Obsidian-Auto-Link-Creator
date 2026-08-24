@@ -1,7 +1,7 @@
 import { Modal, App } from 'obsidian';
 import { mount, unmount } from 'svelte';
 import PreviewModal from './ui/PreviewModal.svelte';
-import type { Suggestion } from './ui/suggestion';
+import type { Suggestion } from './ui/suggestion.ts';
 
 export class PreviewSuggestModal extends Modal {
 	private comp: ReturnType<typeof mount> | undefined;
@@ -22,7 +22,9 @@ export class PreviewSuggestModal extends Modal {
 			props: {
 				suggestions: this.suggestions,
 				onApply: (indices: number[]) => {
-					void this.onApply(indices).then(() => this.close());
+					void this.onApply(indices)
+						.then(() => this.close())
+						.catch((err) => console.error('Auto Link Creator:', err));
 				},
 				onCancel: () => this.close(),
 			},

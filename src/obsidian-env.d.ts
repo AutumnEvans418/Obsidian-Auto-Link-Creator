@@ -1,4 +1,4 @@
-import { App, type Command } from 'obsidian';
+import type { Command } from 'obsidian';
 
 declare module 'obsidian' {
 	interface App {

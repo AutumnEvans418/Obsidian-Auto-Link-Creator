@@ -31,7 +31,7 @@ export function mergeAliasesIntoDoc(cur: string, newAliases: string[]): string {
 	if (!keep.length) return cur;
 	const fm = /^---\n([\s\S]*?)\n---\n?/.exec(cur);
 	if (!fm) return cur;
-	const lines = (fm[1] ?? '').split('\n') as string[];
+	const lines = (fm[1] ?? '').split('\n');
 	const idx = lines.findIndex((l) => /^aliases:\s*$/i.test(l.trim()));
 	if (idx === -1) return cur;
 	const existing = new Set<string>();

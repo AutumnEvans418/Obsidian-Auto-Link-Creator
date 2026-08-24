@@ -1,19 +1,19 @@
-import type { App } from 'obsidian';
-import { closestCommonFolder } from './folders';
-import { extractKeywords, extractKeywordsFromDocs } from './keywords';
-import { rootForm } from './nlp';
-import type { AutoLinkSettings } from './settings';
-import { type ParsedTemplate, groupByReference, findAllByTemplates, groupContent } from './template';
-import type { Suggestion } from './ui/suggestion';
+import type { IPlugin } from './services/ipluginInterface.ts';
+import { closestCommonFolder } from './folders.ts';
+import { extractKeywords, extractKeywordsFromDocs } from './keywords.ts';
+import { rootForm } from './nlp.ts';
+import type { AutoLinkSettings } from './settingsSchema.ts';
+import { type ParsedTemplate, groupByReference, findAllByTemplates, groupContent } from './template.ts';
+import type { Suggestion } from './ui/suggestion.ts';
 
 /** Merge per-file hits into vault-wide suggestions with resolved folders. */
 export async function collectVaultSuggestions(
-	app: App,
+	plugin: IPlugin,
 	s: AutoLinkSettings): Promise<Suggestion[]> {
 	const extra = s.extraStopwords.split(',').map((x) => x.trim()).filter(Boolean);
 	// Existing note names keyed by root form, so variant forms fold onto them.
 	const existingNotes = new Map<string, string>();
-	for (const f of app.vault.getMarkdownFiles()) {
+	for (const f of plugin.markdownFiles()) {
 		const bare = f.basename;
 		existingNotes.set(rootForm(bare.toLowerCase()), bare);
 	}
@@ -41,8 +41,8 @@ export async function collectVaultSuggestions(
 	// phrases that never repeat within one note.
 	const nlpFiles = new Map<string, Set<string>>();
 	const docs: string[] = [];
-	for (const file of app.vault.getMarkdownFiles()) {
-		const doc = await app.vault.read(file);
+	for (const file of plugin.markdownFiles()) {
+		const doc = await plugin.read(file.path);
 		docs.push(doc);
 		if (s.enableTemplateKeywords) {
 			for (const group of groupByReference(

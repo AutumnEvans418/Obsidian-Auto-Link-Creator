@@ -1,8 +1,7 @@
-import { TFile, Vault } from 'obsidian';
-import { mergeAliasesIntoDoc, mergeContent, noteBody } from './note';
-import type { NoteFields } from './note';
-import { titleCase } from './nlp';
-import type { IPlugin } from './services/ipluginInterface';
+import { mergeAliasesIntoDoc, mergeContent, noteBody } from './note.ts';
+import type { NoteFields } from './note.ts';
+import { titleCase } from './nlp.ts';
+import type { IPlugin } from './services/ipluginInterface.ts';
 
 /** Case-insensitive name (lowercased, extension stripped). */
 const bare = (p: string) => p.split('/').pop()?.replace(/\.md$/i, '') ?? '';
