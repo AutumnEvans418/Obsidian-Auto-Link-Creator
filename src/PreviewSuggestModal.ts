@@ -32,7 +32,7 @@ export class PreviewSuggestModal extends Modal {
 	}
 
 	onClose() {
-		if (this.comp) unmount(this.comp);
+		if (this.comp) void unmount(this.comp);
 		this.contentEl.empty();
 	}
 }

@@ -29,4 +29,18 @@ export default defineConfig(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		// Node-only unit tests (`npm test` = `node --test`); Obsidian rules don't apply.
+		files: ['test/**/*.ts'],
+		languageOptions: {
+			globals: {
+				...globals.node,
+			},
+		},
+		rules: {
+			'@typescript-eslint/no-floating-promises': 'off',
+			'@typescript-eslint/no-unnecessary-type-assertion': 'off',
+			'obsidianmd/no-nodejs-modules': 'off',
+		},
+	},
 );
