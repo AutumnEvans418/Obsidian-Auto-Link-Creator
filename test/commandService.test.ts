@@ -11,6 +11,7 @@ function fakePlugin(opts: {
 	doc?: string;
 	files?: Record<string, string>;
 	settings?: Partial<AutoLinkSettings>;
+	source?: string;
 } = {}) {
 	const files = new Map(Object.entries(opts.files ?? {}));
 	const notices: string[] = [];
@@ -20,6 +21,7 @@ function fakePlugin(opts: {
 	}> = [];
 	const plugin: IPlugin & {
 		applyPreview: (indices: number[]) => Promise<void>;
+		previewSuggestions: Suggestion[];
 		notices: string[];
 	} = {
 		value: () => opts.doc ?? '',
@@ -30,6 +32,7 @@ function fakePlugin(opts: {
 		notices,
 		settings: { ...DEFAULT_SETTINGS, ...opts.settings },
 		folder: () => 'a',
+		source: () => opts.source ?? '',
 		markdownFiles: () =>
 			[...files.keys()].map((path) => ({
 				path,
@@ -59,6 +62,10 @@ function fakePlugin(opts: {
 			assert.equal(previews.length, 1, 'expected exactly one preview');
 			return previews[0]!.onApply;
 		},
+		get previewSuggestions() {
+			assert.equal(previews.length, 1, 'expected exactly one preview');
+			return previews[0]!.suggestions;
+		},
 	};
 	return plugin;
 }
@@ -84,19 +91,43 @@ test('linkTemplateKeywords quiet mode skips no-match notice', () => {
 });
 
 test('processFileAndPreview creates note then links source', async () => {
-	const plugin = fakePlugin({ doc: '- Cow - moo', settings: { enableNlpKeywords: false } });
+	const plugin = fakePlugin({
+		doc: '- Cow - moo',
+		settings: { enableNlpKeywords: false },
+		source: 'notes/daily.md',
+	});
 	let setWith = '';
 	plugin.set = (c) => {
 		setWith = c;
 	};
 
 	processFileAndPreview(plugin);
+
+	const [s] = plugin.previewSuggestions;
+	assert.equal(s?.sources?.[0], 'notes/daily.md:1');
+	assert.match(s?.templates?.[0] ?? '', /\{\{Link Name\}\}/);
+	assert.ok(!s?.nlpRoot, 'template-only suggestion has no nlp root');
+
 	await plugin.applyPreview([0]);
 
 	assert.ok(plugin.getFileByPath('a/Cow.md'), 'note created in file folder');
 	assert.match(setWith, /\[\[Cow\]\]/);
 	const last = plugin.notices.at(-1) ?? '';
 	assert.match(last, /Created 1, appended 0\. Linked 1 keyword\(s\)\./);
+});
+
+test('nlp suggestions carry root form and source file', () => {
+	const plugin = fakePlugin({
+		doc: 'The cows grazed. The cows slept.',
+		settings: { enableTemplateKeywords: false },
+		source: 'notes/field.md',
+	});
+
+	processFileAndPreview(plugin);
+
+	const [s] = plugin.previewSuggestions;
+	assert.equal(s?.nlpRoot, 'cow');
+	assert.deepEqual(s?.sources, ['notes/field.md']);
 });
 
 test('processFileAndPreview notices when nothing matches', () => {

@@ -6,6 +6,8 @@ export interface ParsedTemplate {
 	alias?: string;
 	content?: string;
 	lineIndex: number;
+	/** The template pattern that matched this line (set by the finders). */
+	template?: string;
 	/** Resolved note name when `name` is a foldable variant; set by applyers. */
 	target?: string;
 }
@@ -148,7 +150,7 @@ export function findAllTemplate(
 		if (i < skipUntil) continue;
 		const r = parseAt(c, lines, i, skipLinked);
 		if (r) {
-			out.push(r.hit);
+			out.push({ ...r.hit, template: tpl });
 			if (r.childCount) skipUntil = i + 1 + r.childCount;
 		}
 	}
@@ -165,10 +167,11 @@ export function findAllByTemplates(
 	templates: string[],
 	opts: TemplateOptions = {},
 ): ParsedTemplate[] {
-	const comps: CompiledTemplate[] = [];
+	const comps: CompiledTemplateWithSource[] = [];
 	for (const tpl of templates) {
 		const c = compileTemplate(tpl);
-		if (c) comps.push(c);
+		if (!c) continue;
+		comps.push({ ...c, template: tpl });
 	}
 	const lines = text.split('\n');
 	const out: ParsedTemplate[] = [];
@@ -190,7 +193,7 @@ export function findAllByTemplates(
 		for (const c of comps) {
 			const r = parseAt(c, lines, i, skipLinked);
 			if (!r) continue;
-			out.push(r.hit);
+			out.push({ ...r.hit, template: c.template });
 			if (r.childCount) skipUntil = i + 1 + r.childCount;
 			break;
 		}
@@ -220,7 +223,7 @@ export function matchTemplate(
 			if (inFence) continue;
 		}
 		const r = parseAt(c, lines, i, skipLinked);
-		if (r) return r.hit;
+		if (r) return { ...r.hit, template: tpl };
 	}
 	return null;
 }
@@ -230,6 +233,8 @@ interface ParseResult {
 	/** Number of child lines consumed into `content` (0 for inline/single-line). */
 	childCount: number;
 }
+
+type CompiledTemplateWithSource = CompiledTemplate & { template: string };
 
 /**
  * Match one line and gather content. Content is the inline value when present;

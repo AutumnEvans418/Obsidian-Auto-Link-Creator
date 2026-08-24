@@ -28,10 +28,14 @@ export default class AutoLinkCreator extends Plugin {
 	 */
 	private facade(
 		editor?: IEditorView,
-		folder = '',
+		filePath = '',
 	): IPlugin {
 		const app = this.app;
 		const readSettings = () => this.settings;
+		const folderOf = (path: string): string => {
+			const cut = path.lastIndexOf('/');
+			return cut === -1 ? '' : path.slice(0, cut);
+		};
 		const openInLeaf = async (
 			file: TFile,
 			state?: OpenViewState,
@@ -54,7 +58,8 @@ export default class AutoLinkCreator extends Plugin {
 			get settings() {
 				return readSettings();
 			},
-			folder: () => folder,
+			folder: () => folderOf(filePath),
+			source: () => filePath,
 
 			markdownFiles: () => app.vault.getMarkdownFiles(),
 			getFiles: async (f) => (await app.vault.adapter.list(f)).files,
@@ -112,7 +117,7 @@ export default class AutoLinkCreator extends Plugin {
 					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 					if (view)
 						linkTemplateKeywords(
-							this.facade(view.editor, view.file?.parent?.path ?? ''),
+							this.facade(view.editor, view.file?.path ?? ''),
 							true,
 						);
 				}
@@ -127,7 +132,7 @@ export default class AutoLinkCreator extends Plugin {
 			name: 'Process current file without preview',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				if (!this.settings.enableTemplateKeywords) return;
-				linkTemplateKeywords(this.facade(editor, ctx.file?.parent?.path ?? ''));
+				linkTemplateKeywords(this.facade(editor, ctx.file?.path ?? ''));
 			},
 		});
 
@@ -136,7 +141,7 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'preview-create-notes',
 			name: 'Process current file and preview links',
 			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-				processFileAndPreview(this.facade(editor, ctx.file?.parent?.path ?? ''));
+				processFileAndPreview(this.facade(editor, ctx.file?.path ?? ''));
 			},
 		});
 

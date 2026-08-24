@@ -9,7 +9,11 @@ export interface Suggestion {
 	/** Singular template hits to turn into links after note creation. */
 	hits: ParsedTemplate[];
 	/** Paths of files that reference this note (vault-wide scan). */
-	sourceFiles?: string[];
+	sources?: string[];
+	/** Template patterns that produced the hits (deduped, in first-seen order). */
+	templates?: string[];
+	/** Lemmatized root the NLP detector grouped this keyword under. */
+	nlpRoot?: string;
 	/** Resolved folder to create the note in (vault-wide scan). */
 	targetFolder?: string;
 }

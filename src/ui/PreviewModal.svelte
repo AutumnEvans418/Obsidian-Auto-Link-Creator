@@ -83,7 +83,28 @@ const excerpt = (content: string): string => {
 					{#if s.targetFolder !== undefined}
 						<span class="alc-preview-folder">→ {s.targetFolder || 'vault root'}</span>
 					{/if}
-					{#if s.aliases.length}
+					{#if s.sources?.length}
+						<span class="alc-preview-sources" title={s.sources.join('\n')}>
+							in {s.sources.slice(0, 3).join(', ')}{s.sources.length > 3
+								? ` +${s.sources.length - 3} more`
+								: ''}
+						</span>
+					{/if}
+					{#if s.templates?.length}
+						<span class="alc-preview-template" title={s.templates.join('\n')}>
+							template: {s.templates[0]}{s.templates.length > 1
+								? ` (+${s.templates.length - 1})`
+								: ''}
+						</span>
+					{/if}
+					{#if s.nlpRoot}
+						<span class="alc-preview-nlp">
+							nlp root "{s.nlpRoot}"{s.aliases.length
+								? ` · variants: ${s.aliases.join(', ')}`
+								: ''}
+						</span>
+					{/if}
+					{#if s.aliases.length && !s.nlpRoot}
 						<span class="alc-preview-aliases">Aliases: {s.aliases.join(', ')}</span>
 					{/if}
 					{#if s.content}
@@ -148,6 +169,13 @@ const excerpt = (content: string): string => {
 	.alc-preview-usage {
 		opacity: 0.55;
 		font-size: 0.85em;
+	}
+	.alc-preview-sources,
+	.alc-preview-template,
+	.alc-preview-nlp {
+		opacity: 0.55;
+		font-size: 0.85em;
+		font-family: var(--font-monospace);
 	}
 	.alc-preview-folder {
 		opacity: 0.55;

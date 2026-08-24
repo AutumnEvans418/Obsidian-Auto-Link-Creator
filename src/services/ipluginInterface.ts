@@ -20,6 +20,8 @@ export interface IPlugin {
 	set(content: string): void;
 	notice(msg: string): void;
 	readonly settings: AutoLinkSettings;
+	/** Path of the active file; '' when none. */
+	source(): string;
 	/** Folder of the active file; '' = vault root. */
 	folder(): string;
 

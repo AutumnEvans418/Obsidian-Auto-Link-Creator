@@ -27,6 +27,7 @@ export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 export function processFileAndPreview(plugin: IPlugin): void {
 	const doc = plugin.value();
 	const folder = plugin.folder();
+	const source = plugin.source();
 	const suggestions: Suggestion[] = [];
 	if (plugin.settings.enableTemplateKeywords) {
 		suggestions.push(
@@ -34,12 +35,15 @@ export function processFileAndPreview(plugin: IPlugin): void {
 				findAllByTemplates(doc, plugin.settings.templates, {
 					ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 				}),
+				source || undefined,
 			),
 		);
 	}
 	if (plugin.settings.enableNlpKeywords) {
 		const extra = plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
-		suggestions.push(...nlpSuggestions(doc, extra));
+		const found = nlpSuggestions(doc, extra);
+		if (source) for (const s of found) s.sources = [source];
+		suggestions.push(...found);
 	}
 	if (!suggestions.length) {
 		plugin.notice('No keyword matches found.');

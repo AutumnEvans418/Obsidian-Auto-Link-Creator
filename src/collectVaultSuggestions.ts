@@ -82,13 +82,19 @@ export async function collectVaultSuggestions(
 
 	return [...acc.values()].map((e) => {
 		const files = [...e.files];
+		const templates: string[] = [];
+		for (const h of e.hits) {
+			if (h.template && !templates.includes(h.template)) templates.push(h.template);
+		}
 		return {
 			name: e.name,
 			aliases: [...e.aliases],
 			content: e.contents.length ? e.contents.join('\n\n') : undefined,
 			count: e.count,
 			hits: e.hits,
-			sourceFiles: files,
+			sources: files,
+			templates: templates.length ? templates : undefined,
+			nlpRoot: rootForm(e.name.toLowerCase()),
 			targetFolder: closestCommonFolder(files),
 		};
 	});
