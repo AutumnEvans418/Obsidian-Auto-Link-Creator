@@ -1,100 +1,98 @@
-# Obsidian Sample Plugin
+# Obsidian Auto Link Creator
+
+An Obsidian plugin that automatically creates links and notes from your writing. Unlike other linkers that only replace text matching existing notes, this plugin *suggests new links* — driven by list templates, repeated phrases, and NLP keyword detection — and shows you a preview before applying anything. Supports aliases, pluralization, and works great alongside [obsidian-automatic-linker](https://github.com/kdnk/obsidian-automatic-linker).
+
+## Features
+
+### Template-based linking
+
+Write definition lists using templates; the plugin turns them into wiki links and creates the target notes with content.
+
+Default templates (configurable, first match wins):
 
 ```
-this.app.emulateMobile(true);
-```
-> The Node.js API, and the Electron API aren't available on mobile devices. Any calls to these libraries made by your plugin or it's dependencies can cause your plugin to crash.
-
-- https://docs.obsidian.md/Plugins/Getting+started/Use+Svelte+in+your+plugin
-- https://docs.obsidian.md/Plugins/Editor/Editor+extensions
-
-This is a sample plugin for Obsidian (https://obsidian.md).
-
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
-
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and outputs a Notice on click.
-- Registers a global interval which logs 'setInterval' to the console.
-
-## First time developing plugins?
-
-Quick starting guide for new plugin devs:
-
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `src/main.ts` to `main.js`.
-- Make changes to `src/main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
-
-## Releasing new releases
-
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
-
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
-
-## Adding your plugin to the community plugin list
-
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
-
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v18 (`node --version`).
-- `npm i` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint
-
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code.
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-	"fundingUrl": "https://buymeacoffee.com"
-}
+- {{Link Name}} ({{Link Alias}}) - {{Link Content}}
+- {{Link Name}} ({{Link Alias}})
+- {{Link Name}} - {{Link Content}}
 ```
 
-If you have multiple URLs, you can also do:
+Example input:
 
-```json
-{
-	"fundingUrl": {
-		"Buy Me a Coffee": "https://buymeacoffee.com",
-		"GitHub Sponsor": "https://github.com/sponsors",
-		"Patreon": "https://www.patreon.com/"
-	}
-}
+```md
+- Risk Appetite - Level of risk accepted by a company in terms of quantity and severity.
+- Access control systems (ACS)
+  - Identification
+  - Authentication
+  - Authorization
 ```
 
-## API Documentation
+Result:
 
-See https://docs.obsidian.md
+```
+- [[Risk Appetite]] - Level of risk accepted by a company in terms of quantity and severity.
+- [[Access Control Systems|ACS]]
+  - Identification
+  ...
+```
+
+A note `Risk Appetite.md` is created containing the content, plus an `acs` alias on `Access Control Systems`.
+
+### NLP keyword detection
+
+Scans note prose for repeated phrases worth linking:
+
+- Frequency counting with stop-word removal (plus your own extra stop words)
+- Lemmatization and singularization: `Cow` ⇄ `Cows`, `Party` ⇄ `Parties`, `Changed/Changing` → `Change`
+- Variants are added as aliases so all forms resolve to the same note
+- Code blocks are skipped
+
+### Linking to existing notes
+
+Instead of only creating new notes, the plugin can detect phrases that match **existing** note names or aliases and link them — either by exact text match or by NLP root/variant match (`cows` links to a note named `Cow`).
+
+### Preview before applying
+
+Destructive operations go through a preview modal first: see every suggested link, which file it came from and why it was suggested, select/deselect items, then apply. Undo is supported (updated notes can be opened in background leaves for native Ctrl-Z rollback).
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| Process current file and preview links | Scan active note, preview suggested links |
+| Process current file without preview | Apply directly (respects settings) |
+| Link existing notes in current file | Only link phrases matching existing notes |
+| Process whole vault and preview links | Scan all notes, batch preview |
+
+With **Link on save** enabled, the active note is processed automatically when saved.
+
+## Settings
+
+- **Templates** — line patterns with `{{Link Name}}`, `{{Link Alias}}`, `{{Link Content}}`
+- **Keyword sources** — enable/disable template-based and NLP-based keywords; add extra stop words
+- **Ignore code blocks**
+- **Link on save**, **Open files for undo**
+- **Capitalize names** — capitalize each word of note names/link text
+- **Existing notes** — enable, choose exact vs NLP-root matching, optional on-save trigger
+
+New notes are created in the same folder as the source note (or the highest common folder / vault root in vault-wide runs). If a note already exists, its content is appended instead.
+
+## Installation
+
+Not yet in the community plugin store. Install manually:
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator/releases).
+2. Copy them into `<Vault>/.obsidian/plugins/Obsidian-Auto-Link-Creator/`.
+3. Reload Obsidian and enable the plugin in Community plugins.
+
+Or via BRAT: add `AutumnEvans418/Obsidian-Auto-Link-Creator` as a custom repository.
+
+## Development
+
+- `npm install`
+- `npm run dev` — watch build
+- `npm run test` — unit tests (`node --test`)
+- `npm run lint` / `npm run build` — lint + typecheck + production bundle
+
+## License
+
+0-BSD — see [LICENSE](LICENSE).

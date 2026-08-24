@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-auto-link-creator",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Automatically creates Obsidian links from list templates, repeated phrases, and NLP keyword detection. Suggests links across the vault with a preview before applying.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
