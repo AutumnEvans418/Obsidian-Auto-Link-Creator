@@ -71,6 +71,11 @@ Add test when fixing bugs.
 - [x] Setting for NLP based keywords.
 
 - [x] Add setting and feature to link existing note based on its file name or list of aliases, following the same capitalization rules if enabled. Instead of replacing a link with a new/non-existing file name, this will search the index for an existing note and use that if it matches. Different options for exact match or nlp root match. Use this plugin for inspiration:  https://github.com/kdnk/obsidian-automatic-linker. This plugin does basically that, except that it doesn't have nlp support.
+
+- [x] Preserve scroll position on save.
+- [ ] On save when dealing with checking for existing notes should use nlp to find close matches, such as plurals, and link them, if the setting is enabled. Armor Classes -> Armor Class (existing note)
+- [ ] Bug: Add template is at the bottom of settings rather than other the template list.
+
 ## Commands (npm)
 
 ```bash

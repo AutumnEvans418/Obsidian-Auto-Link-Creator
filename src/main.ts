@@ -52,9 +52,28 @@ export default class AutoLinkCreator extends Plugin {
 			const f = app.vault.getAbstractFileByPath(path);
 			return f instanceof TFile ? f : null;
 		};
+		// Replace the document via a transaction rather than setValue():
+		// setValue resets cursor + scroll to the top; a transaction applies a
+		// diff and keeps the viewport anchored.
 		return {
 			value: () => editor?.getValue() ?? '',
-			set: (content) => editor?.setValue(content),
+			set: (content) => {
+				if (!editor) return;
+				// Transaction keeps cursor + scroll; setValue resets to top.
+				if (editor.transaction && editor.offsetToPos) {
+					editor.transaction({
+						changes: [
+							{
+								from: { line: 0, ch: 0 },
+								to: editor.offsetToPos(editor.getValue().length),
+								text: content,
+							},
+						],
+					});
+				} else {
+					editor.setValue(content);
+				}
+			},
 			notice: (msg) => new Notice(msg),
 			get settings() {
 				return readSettings();

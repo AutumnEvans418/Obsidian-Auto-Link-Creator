@@ -1,40 +1,56 @@
 import type { IPlugin } from './services/ipluginInterface.ts';
 import { closestCommonFolder } from './folders.ts';
 import { extractKeywords, extractKeywordsFromDocs } from './keywords.ts';
-import { rootForm } from './nlp.ts';
+import { rootForm, variantForms } from './nlp.ts';
+import { buildNoteIndex } from './existingLinks.ts';
+import type { IndexEntry } from './existingLinks.ts';
 import type { AutoLinkSettings } from './settingsSchema.ts';
 import { type ParsedTemplate, groupByReference, findAllByTemplates, groupContent } from './template.ts';
 import type { Suggestion } from './ui/suggestion.ts';
+
+/** Resolve a name to an existing note whose basename/alias shares a form. */
+function existingNoteResolver(plugin: IPlugin, mode: AutoLinkSettings['existingMatchMode']) {
+	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
+		path: f.path,
+		basename: f.basename,
+		aliases: plugin.noteAliases(f.path),
+	}));
+	const idx = buildNoteIndex(entries, mode);
+	return (name: string): string | undefined => {
+		for (const form of [name.toLowerCase(), ...variantForms(name.toLowerCase())]) {
+			const base = idx.get(form);
+			if (base) return base;
+		}
+		return undefined;
+	};
+}
 
 /** Merge per-file hits into vault-wide suggestions with resolved folders. */
 export async function collectVaultSuggestions(
 	plugin: IPlugin,
 	s: AutoLinkSettings): Promise<Suggestion[]> {
 	const extra = s.extraStopwords.split(',').map((x) => x.trim()).filter(Boolean);
-	// Existing note names keyed by root form, so variant forms fold onto them.
-	const existingNotes = new Map<string, string>();
-	for (const f of plugin.markdownFiles()) {
-		const bare = f.basename;
-		existingNotes.set(rootForm(bare.toLowerCase()), bare);
+	// Fold variant references onto existing notes ("Armor Classes" → "Armor Class").
+	const resolveExisting = existingNoteResolver(plugin, s.existingMatchMode);
+	interface Acc {
+		name: string;
+		aliases: Set<string>;
+		contents: string[];
+		hits: ParsedTemplate[];
+		files: Set<string>;
+		count: number;
 	}
-	const acc = new Map<
-		string,
-		{
-			name: string;
-			aliases: Set<string>;
-			contents: string[];
-			hits: ParsedTemplate[];
-			files: Set<string>;
-			count: number;
-		}
-	>();
-	const entry = (name: string) => {
-		const preferred = existingNotes.get(rootForm(name.toLowerCase()));
-		const resolved = preferred ?? name;
-		const e = { name: resolved, aliases: new Set<string>(), contents: [], hits: [], files: new Set<string>(), count: 0 };
-		acc.set(rootForm(name.toLowerCase()), e);
+	const acc: Acc[] = [];
+	const entry = (name: string): Acc => {
+		const resolved = resolveExisting(name) ?? name;
+		const e: Acc = { name: resolved, aliases: new Set<string>(), contents: [], hits: [], files: new Set<string>(), count: 0 };
+		acc.push(e);
 		return e;
 	};
+	const findEntry = (name: string): Acc | undefined =>
+		acc.find((e) =>
+			e.name.toLowerCase() === name.toLowerCase() || variantForms(e.name.toLowerCase()).some((f) => variantForms(name.toLowerCase()).includes(f)),
+		);
 
 	// NLP: map every phrase to the files it appears in, using a per-file scan
 	// with minimum frequency 1 so membership is tracked even for cross-file
@@ -50,9 +66,12 @@ export async function collectVaultSuggestions(
 			)) {
 				const lead = group[0];
 				if (!lead) continue;
-				const e = acc.get(rootForm(lead.name.toLowerCase())) ?? entry(lead.name);
+				const e = findEntry(lead.name) ?? entry(lead.name);
 				for (const h of group) {
-					if (h.name !== e.name) e.aliases.add(h.name);
+					if (h.name !== e.name) {
+						e.aliases.add(h.name);
+						if (!h.target) h.target = e.name;
+					}
 					if (h.alias && h.alias !== e.name) e.aliases.add(h.alias);
 				}
 				e.hits.push(...group);
@@ -73,14 +92,14 @@ export async function collectVaultSuggestions(
 
 	if (s.enableNlpKeywords) {
 		for (const k of extractKeywordsFromDocs(docs, { extraStopwords: extra })) {
-			const e = acc.get(rootForm(k.name.toLowerCase())) ?? entry(k.name);
+			const e = findEntry(k.name) ?? entry(k.name);
 			for (const a of k.aliases) if (a !== e.name) e.aliases.add(a);
 			for (const f of nlpFiles.get(k.name.toLowerCase()) ?? []) e.files.add(f);
 			e.count += k.count;
 		}
 	}
 
-	return [...acc.values()].map((e) => {
+	return [...acc].map((e) => {
 		const files = [...e.files];
 		const templates: string[] = [];
 		for (const h of e.hits) {

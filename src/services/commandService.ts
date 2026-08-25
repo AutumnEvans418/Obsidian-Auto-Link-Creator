@@ -1,15 +1,25 @@
-import { collectSuggestions } from "../collectSuggestions.ts";
+import { collectSuggestions, dedupeSuggestions } from "../collectSuggestions.ts";
 import { collectVaultSuggestions } from "../collectVaultSuggestions.ts";
 import { createNote } from "../creator.ts";
-import { applyExistingLinks, buildNoteIndex } from "../existingLinks.ts";
+import { applyExistingLinks, buildNoteIndex, foldHitTargets } from "../existingLinks.ts";
 import type { IndexEntry } from "../existingLinks.ts";
 import { applyLinks } from "../link.ts";
-import { rootForm } from "../nlp.ts";
+import { variantForms } from "../nlp.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
 import type { IPlugin } from "./ipluginInterface.ts";
+
+/** Note index over the vault's markdown files, per the existing-match mode. */
+function vaultNoteIndex(plugin: IPlugin): Map<string, string> {
+	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
+		path: f.path,
+		basename: f.basename,
+		aliases: plugin.noteAliases(f.path),
+	}));
+	return buildNoteIndex(entries, plugin.settings.existingMatchMode);
+}
 
 /** Rewrite template keyword lines in `plugin`'s doc into wiki links, idempotently. */
 export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
@@ -21,6 +31,8 @@ export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 		if (!quiet) plugin.notice('No template matches found.');
 		return;
 	}
+	// Fold variant references onto existing notes (Armor Classes → Armor Class).
+	foldHitTargets(hits, vaultNoteIndex(plugin));
 	plugin.set(applyLinks(doc, hits, plugin.settings.capitalize));
 	plugin.notice(`Linked ${hits.length} keyword(s).`);
 }
@@ -56,15 +68,17 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		let appended = 0;
 		const toLink: ParsedTemplate[] = [];
 		const onWrite = plugin.undoableWriter();
-		for (const i of indices) {
-			const s = suggestions[i];
-			if (!s) continue;
-			for (const h of s.hits) toLink.push(h);
+		const groups = dedupeSuggestions(
+			indices
+				.map((i) => suggestions[i])
+				.filter((s): s is Suggestion => !!s),
+		);
+		for (const g of groups) {
 			try {
 				const res = await createNote(
 					plugin,
 					folder,
-					{ name: s.name, content: s.content, aliases: s.aliases },
+					{ name: g.name, content: g.content, aliases: g.aliases },
 					plugin.settings.capitalize,
 					onWrite,
 				);
@@ -74,6 +88,7 @@ export function processFileAndPreview(plugin: IPlugin): void {
 				plugin.notice(`Auto Link Creator error: ${String(err)}`);
 			}
 		}
+		for (const g of groups) toLink.push(...g.hits);
 		if (toLink.length) {
 			plugin.set(applyLinks(plugin.value(), toLink, plugin.settings.capitalize));
 			plugin.notice(
@@ -96,15 +111,17 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 		const onWrite = plugin.undoableWriter();
 		let created = 0;
 		let appended = 0;
-		const selected = indices
-			.map((i) => suggestions[i])
-			.filter((s): s is Suggestion => !!s);
-		for (const s of selected) {
+		const groups = dedupeSuggestions(
+			indices
+				.map((i) => suggestions[i])
+				.filter((s): s is Suggestion => !!s),
+		);
+		for (const g of groups) {
 			try {
 				const res = await createNote(
 					plugin,
-					s.targetFolder ?? '',
-					{ name: s.name, content: s.content, aliases: s.aliases },
+					g.targetFolder ?? '',
+					{ name: g.name, content: g.content, aliases: g.aliases },
 					plugin.settings.capitalize,
 					onWrite,
 				);
@@ -116,30 +133,29 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 		}
 		let linked = 0;
 		if (plugin.settings.enableTemplateKeywords) {
-			// Link each selected template suggestion's lines in every file.
-			const targetByRoot = new Map<string, string>();
-			for (const s of selected) {
-				if (s.hits.length)
-					targetByRoot.set(rootForm(s.name.toLowerCase()), s.name);
+			// Link each file's template hits whose reference matches a selected
+			// group (exact or variant), folding them onto the canonical name.
+			const targetIdx = new Map<string, string>();
+			for (const g of groups) {
+				for (const form of variantForms(g.name.toLowerCase())) {
+					if (!targetIdx.has(form)) targetIdx.set(form, g.name);
+				}
 			}
-			if (targetByRoot.size) {
+			if (targetIdx.size) {
 				for (const file of plugin.markdownFiles()) {
 					const doc = await plugin.read(file.path);
 					const hits = findAllByTemplates(
 						doc,
 						plugin.settings.templates,
 						{ ignoreCodeblocks: plugin.settings.ignoreCodeblocks },
-					).filter((h) => targetByRoot.has(rootForm(h.name.toLowerCase())));
+					);
 					if (!hits.length) continue;
-					for (const h of hits) {
-						const t = targetByRoot.get(rootForm(h.name.toLowerCase()));
-						if (t && t !== h.name && !h.target) h.target = t;
-					}
+					foldHitTargets(hits, targetIdx);
 					const updated = applyLinks(doc, hits, plugin.settings.capitalize);
 					if (updated === doc) continue;
 					if (onWrite) await onWrite(file.path, updated);
 					else await plugin.write(file.path, updated);
-					linked += hits.length;
+					linked += hits.filter((h) => h.target).length;
 				}
 			}
 		}

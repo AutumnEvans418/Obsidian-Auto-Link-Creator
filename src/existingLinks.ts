@@ -1,5 +1,6 @@
 import { wikiSpans } from './linkDetector.ts';
 import { titleCase, variantForms } from './nlp.ts';
+import type { ParsedTemplate } from './template.ts';
 
 /** A note that phrases in a document can be linked to. */
 export interface IndexEntry {
@@ -51,6 +52,31 @@ function overlapsAny(
 	end: number,
 ): boolean {
 	return spans.some((s) => start < s.end && end > s.start);
+}
+
+/**
+ * Point each hit at an existing note when its name is the same reference
+ * (exact or variant match per `mode`), so `Armor Classes` links to the
+ * `Armor Class` note instead of self-linking. Self-hits keep no target.
+ */
+export function foldHitTargets(
+	hits: ParsedTemplate[],
+	index: Map<string, string>,
+	mode: MatchMode = 'root',
+): void {
+	for (const h of hits) {
+		const forms =
+			mode === 'root'
+				? [h.name.toLowerCase(), ...variantForms(h.name.toLowerCase())]
+				: [h.name.toLowerCase()];
+		for (const form of forms) {
+			const base = index.get(form);
+			if (base && base.toLowerCase() !== h.name.toLowerCase()) {
+				h.target = base;
+				break;
+			}
+		}
+	}
 }
 
 /**

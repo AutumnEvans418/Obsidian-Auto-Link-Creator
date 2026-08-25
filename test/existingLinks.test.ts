@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyExistingLinks, buildNoteIndex } from '../src/existingLinks.ts';
+import { applyExistingLinks, buildNoteIndex, foldHitTargets } from '../src/existingLinks.ts';
 
 const entries = [
 	{ path: 'a/Cow.md', basename: 'Cow', aliases: ['Bovine'] },
@@ -87,4 +87,31 @@ test('longer key wins over shorter overlapping key', () => {
 	const res = applyExistingLinks('our risk appetite grows', idx, { capitalize: false });
 	assert.match(res.updated, /our \[\[Risk Appetite\]\] grows/);
 	assert.equal(res.count, 1);
+});
+
+test('foldHitTargets folds variant names onto existing notes', () => {
+	const idx = buildNoteIndex(entries, 'root');
+	const hits = [
+		{ name: 'Armor Class', alias: undefined, content: undefined, lineIndex: 0, template: '' },
+		{ name: 'Armor Classes', alias: undefined, content: undefined, lineIndex: 1, template: '' },
+		{ name: 'Risk Appetites', alias: undefined, content: undefined, lineIndex: 2, template: '' },
+	] as Parameters<typeof foldHitTargets>[0];
+	foldHitTargets(hits, idx);
+	assert.equal(hits[1]?.target, undefined); // not in this index
+	const cowIdx = buildNoteIndex(
+		[entries[0]!, { path: 'c/Armor Class.md', basename: 'Armor Class', aliases: [] }],
+		'root',
+	);
+	foldHitTargets(hits, cowIdx);
+	assert.equal(hits[0]?.target, undefined); // self-reference stays unfolded
+	assert.equal(hits[1]?.target, 'Armor Class'); // plural folds onto singular
+});
+
+test('foldHitTargets respects exact mode (no variant folding)', () => {
+	const idx = buildNoteIndex([entries[0]!], 'exact');
+	const hits = [
+		{ name: 'Cows', alias: undefined, content: undefined, lineIndex: 0, template: '' },
+	] as Parameters<typeof foldHitTargets>[0];
+	foldHitTargets(hits, idx, 'exact');
+	assert.equal(hits[0]?.target, undefined);
 });

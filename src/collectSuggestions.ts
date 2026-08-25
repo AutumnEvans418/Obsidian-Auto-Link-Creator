@@ -1,4 +1,5 @@
 import { type ParsedTemplate, groupByReference, groupContent } from './template.ts';
+import { sameReference } from './nlp.ts';
 import type { Suggestion } from './ui/suggestion.ts';
 
 /**
@@ -10,6 +11,11 @@ export function collectSuggestions(hits: ParsedTemplate[], file?: string): Sugge
 		const lead = group[0];
 		const rest = group.slice(1);
 		const aliases = rest.map((h) => h.name).filter((n) => n !== lead?.name);
+		// Fold variant hits onto the lead name so applyLinks emits
+		// [[Lead|Variant]] instead of a self-link to the variant.
+		for (const h of rest) {
+			if (lead && !h.target) h.target = lead.name;
+		}
 		const templates: string[] = [];
 		for (const h of group) {
 			if (h.template && !templates.includes(h.template)) templates.push(h.template);
@@ -26,4 +32,27 @@ export function collectSuggestions(hits: ParsedTemplate[], file?: string): Sugge
 			templates: templates.length ? templates : undefined,
 		};
 	});
+}
+
+/** Merge same-reference suggestions so one run never creates duplicate notes. */
+export function dedupeSuggestions(selected: Suggestion[]): Suggestion[] {
+	const out: Suggestion[] = [];
+	for (const s of selected) {
+		const canon = out.find((o) => sameReference(o.name, s.name));
+		if (!canon) {
+			out.push(s);
+			continue;
+		}
+		for (const a of [s.name, ...s.aliases]) {
+			if (a !== canon.name && !canon.aliases.includes(a)) canon.aliases.push(a);
+		}
+		if (s.content && !canon.content?.includes(s.content))
+			canon.content = canon.content ? `${canon.content}\n${s.content}` : s.content;
+		canon.hits.push(...s.hits);
+		canon.count = (canon.count ?? 0) + (s.count ?? 0);
+		for (const src of s.sources ?? []) {
+			if (!canon.sources?.includes(src)) (canon.sources ??= []).push(src);
+		}
+	}
+	return out;
 }
