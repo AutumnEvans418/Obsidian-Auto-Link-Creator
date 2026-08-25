@@ -39,11 +39,12 @@ export async function collectVaultSuggestions(
 		hits: ParsedTemplate[];
 		files: Set<string>;
 		count: number;
+		nlpCount: number;
 	}
 	const acc: Acc[] = [];
 	const entry = (name: string): Acc => {
 		const resolved = resolveExisting(name) ?? name;
-		const e: Acc = { name: resolved, aliases: new Set<string>(), contents: [], hits: [], files: new Set<string>(), count: 0 };
+		const e: Acc = { name: resolved, aliases: new Set<string>(), contents: [], hits: [], files: new Set<string>(), count: 0, nlpCount: 0 };
 		acc.push(e);
 		return e;
 	};
@@ -62,7 +63,7 @@ export async function collectVaultSuggestions(
 		docs.push(doc);
 		if (s.enableTemplateKeywords) {
 			for (const group of groupByReference(
-				findAllByTemplates(doc, s.templates, { ignoreCodeblocks: s.ignoreCodeblocks })
+				findAllByTemplates(doc, s.templates, { ignoreCodeblocks: s.ignoreCodeblocks, ignoreDates: s.ignoreDates })
 			)) {
 				const lead = group[0];
 				if (!lead) continue;
@@ -96,6 +97,7 @@ export async function collectVaultSuggestions(
 			for (const a of k.aliases) if (a !== e.name) e.aliases.add(a);
 			for (const f of nlpFiles.get(k.name.toLowerCase()) ?? []) e.files.add(f);
 			e.count += k.count;
+			e.nlpCount += k.count;
 		}
 	}
 
@@ -105,6 +107,9 @@ export async function collectVaultSuggestions(
 		for (const h of e.hits) {
 			if (h.template && !templates.includes(h.template)) templates.push(h.template);
 		}
+		// Variant forms (plural/singular/root) so template-only groups still
+		// create notes with aliases.
+		for (const a of variantForms(e.name)) if (a !== e.name) e.aliases.add(a);
 		return {
 			name: e.name,
 			aliases: [...e.aliases],
@@ -113,7 +118,9 @@ export async function collectVaultSuggestions(
 			hits: e.hits,
 			sources: files,
 			templates: templates.length ? templates : undefined,
-			nlpRoot: rootForm(e.name.toLowerCase()),
+			// nlpRoot only when the NLP pass contributed, so preview source
+			// filtering can tell template-only findings apart.
+			nlpRoot: e.nlpCount ? rootForm(e.name.toLowerCase()) : undefined,
 			targetFolder: closestCommonFolder(files),
 		};
 	});

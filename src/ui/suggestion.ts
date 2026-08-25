@@ -17,3 +17,22 @@ export interface Suggestion {
 	/** Resolved folder to create the note in (vault-wide scan). */
 	targetFolder?: string;
 }
+
+/** Keyword source a suggestion was found by. */
+export type SuggestionKind = 'template' | 'nlp';
+
+export function suggestionKinds(s: Suggestion): SuggestionKind[] {
+	const kinds: SuggestionKind[] = [];
+	if (s.templates?.length) kinds.push('template');
+	if (s.nlpRoot) kinds.push('nlp');
+	return kinds;
+}
+
+/** Keep only suggestions found by the preview's configured keyword source. */
+export function filterByPreviewMode(
+	suggestions: Suggestion[],
+	mode: 'both' | 'template' | 'nlp',
+): Suggestion[] {
+	if (mode === 'both') return suggestions;
+	return suggestions.filter((s) => suggestionKinds(s).includes(mode));
+}

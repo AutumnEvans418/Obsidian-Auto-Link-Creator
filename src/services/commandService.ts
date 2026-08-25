@@ -8,6 +8,7 @@ import { variantForms } from "../nlp.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
+import { filterByPreviewMode } from "../ui/suggestion.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
 import type { IPlugin } from "./ipluginInterface.ts";
 
@@ -21,12 +22,33 @@ function vaultNoteIndex(plugin: IPlugin): Map<string, string> {
 	return buildNoteIndex(entries, plugin.settings.existingMatchMode);
 }
 
+/** Template-scan options shared by every entry point. */
+function scanOpts(plugin: IPlugin) {
+	return {
+		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
+		ignoreDates: plugin.settings.ignoreDates,
+	};
+}
+
+/** Index mapping a selected group's name/alias/variant forms → its name. */
+function groupIndex(groups: Array<{ name: string; aliases: string[] }>): Map<string, string> {
+	const idx = new Map<string, string>();
+	for (const g of groups) {
+		for (const form of [
+			g.name.toLowerCase(),
+			...g.aliases.map((a) => a.toLowerCase()),
+			...variantForms(g.name.toLowerCase()),
+		]) {
+			if (!idx.has(form)) idx.set(form, g.name);
+		}
+	}
+	return idx;
+}
+
 /** Rewrite template keyword lines in `plugin`'s doc into wiki links, idempotently. */
 export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 	const doc = plugin.value();
-	const hits = findAllByTemplates(doc, plugin.settings.templates, {
-		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
-	});
+	const hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
 	if (!hits.length) {
 		if (!quiet) plugin.notice('No template matches found.');
 		return;
@@ -42,23 +64,22 @@ export function processFileAndPreview(plugin: IPlugin): void {
 	const doc = plugin.value();
 	const folder = plugin.folder();
 	const source = plugin.source();
-	const suggestions: Suggestion[] = [];
+	const found: Suggestion[] = [];
 	if (plugin.settings.enableTemplateKeywords) {
-		suggestions.push(
+		found.push(
 			...collectSuggestions(
-				findAllByTemplates(doc, plugin.settings.templates, {
-					ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
-				}),
+				findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin)),
 				source || undefined,
 			),
 		);
 	}
 	if (plugin.settings.enableNlpKeywords) {
 		const extra = plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
-		const found = nlpSuggestions(doc, extra);
-		if (source) for (const s of found) s.sources = [source];
-		suggestions.push(...found);
+		const nlpFound = nlpSuggestions(doc, extra);
+		if (source) for (const s of nlpFound) s.sources = [source];
+		found.push(...nlpFound);
 	}
+	const suggestions = filterByPreviewMode(found, plugin.settings.previewKeywords);
 	if (!suggestions.length) {
 		plugin.notice('No keyword matches found.');
 		return;
@@ -89,11 +110,22 @@ export function processFileAndPreview(plugin: IPlugin): void {
 			}
 		}
 		for (const g of groups) toLink.push(...g.hits);
+		let current = plugin.value();
 		if (toLink.length) {
-			plugin.set(applyLinks(plugin.value(), toLink, plugin.settings.capitalize));
-			plugin.notice(
-				`Created ${created}, appended ${appended}. Linked ${toLink.length} keyword(s).`,
-			);
+			current = applyLinks(current, toLink, plugin.settings.capitalize);
+			plugin.set(current);
+		}
+		// NLP suggestions carry no positional hits; link their names/aliases
+		// wherever they appear as plain text in the source doc.
+		const excludeBasename = source.split('/').pop()?.replace(/\.md$/i, '');
+		const res = applyExistingLinks(current, groupIndex(groups), {
+			capitalize: plugin.settings.capitalize,
+			excludeBasename,
+		});
+		if (res.updated !== current) plugin.set(res.updated);
+		const linked = toLink.length + res.count;
+		if (linked) {
+			plugin.notice(`Created ${created}, appended ${appended}. Linked ${linked} keyword(s).`);
 		} else {
 			plugin.notice(`Created ${created}, appended ${appended}.`);
 		}
@@ -102,7 +134,8 @@ export function processFileAndPreview(plugin: IPlugin): void {
 
 /** Scan every markdown file, preview vault-wide suggestions, apply on select. */
 export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
-	const suggestions = await collectVaultSuggestions(plugin, plugin.settings);
+	const collected = await collectVaultSuggestions(plugin, plugin.settings);
+	const suggestions = filterByPreviewMode(collected, plugin.settings.previewKeywords);
 	if (!suggestions.length) {
 		plugin.notice('No keyword matches found in the vault.');
 		return;
@@ -135,20 +168,11 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 		if (plugin.settings.enableTemplateKeywords) {
 			// Link each file's template hits whose reference matches a selected
 			// group (exact or variant), folding them onto the canonical name.
-			const targetIdx = new Map<string, string>();
-			for (const g of groups) {
-				for (const form of variantForms(g.name.toLowerCase())) {
-					if (!targetIdx.has(form)) targetIdx.set(form, g.name);
-				}
-			}
+			const targetIdx = groupIndex(groups);
 			if (targetIdx.size) {
 				for (const file of plugin.markdownFiles()) {
 					const doc = await plugin.read(file.path);
-					const hits = findAllByTemplates(
-						doc,
-						plugin.settings.templates,
-						{ ignoreCodeblocks: plugin.settings.ignoreCodeblocks },
-					);
+					const hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
 					if (!hits.length) continue;
 					foldHitTargets(hits, targetIdx);
 					const updated = applyLinks(doc, hits, plugin.settings.capitalize);

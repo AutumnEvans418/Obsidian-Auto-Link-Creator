@@ -4,6 +4,8 @@ export interface AutoLinkSettings {
 	templates: string[];
 	/** Skip template/child-line matching inside fenced code blocks (```). */
 	ignoreCodeblocks: boolean;
+	/** Skip date/number-like phrases (e.g. `2026`, `2026-08-24`) when linking. */
+	ignoreDates: boolean;
 	/** Capitalize each first letter of note names and link text. */
 	capitalize: boolean;
 	/** Run keyword detection driven by `templates` lines. */
@@ -12,6 +14,8 @@ export interface AutoLinkSettings {
 	enableNlpKeywords: boolean;
 	/** Extra comma-separated words NLP keyword detection drops. */
 	extraStopwords: string;
+	/** Which findings the preview presents: template lines, NLP prose keywords, or both. */
+	previewKeywords: 'both' | 'template' | 'nlp';
 	/** Open updated/appended notes in background leaves so native Ctrl-Z can undo. */
 	openForUndo: boolean;
 	/** Auto-link template keywords in the active note when it is saved. */
@@ -33,10 +37,12 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 		'- {{Link Name}} - {{Link Content}}',
 	],
 	ignoreCodeblocks: true,
+	ignoreDates: true,
 	capitalize: true,
 	enableTemplateKeywords: true,
 	enableNlpKeywords: true,
 	extraStopwords: '',
+	previewKeywords: 'both',
 	openForUndo: true,
 	onSaveEnabled: false,
 	debug: false,

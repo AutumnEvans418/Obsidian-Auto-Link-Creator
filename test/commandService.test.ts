@@ -161,3 +161,84 @@ test('processVaultAndPreview resolves shared folder and links all files', async 
 	assert.match(await plugin.read('a/two.md'), /\[\[Cow\|Cows\]\]/);
 	assert.match(plugin.notices[0] ?? '', /Created 1, appended 0\. Linked \d+ keyword\(s\)\./);
 });
+
+test('preview apply links NLP keyword occurrences in the source doc', async () => {
+	const plugin = fakePlugin({
+		doc: 'The cows grazed. The cows slept.',
+		settings: { enableTemplateKeywords: false },
+	});
+	let setWith = '';
+	plugin.set = (c) => {
+		setWith = c;
+	};
+
+	processFileAndPreview(plugin);
+	await plugin.applyPreview([0]);
+
+	assert.ok(plugin.getFileByPath('a/Cows.md'), 'note created');
+	assert.match(setWith, /\[\[Cows\]\]/, 'source doc linked');
+});
+
+test('linkTemplateKeywords never touches frontmatter', () => {
+	const doc = [
+		'---',
+		'modified:',
+		'  - 2026-08-24T23:47:33-05:00',
+		'created: 2026-08-22T21:02:29-05:00',
+		'- --',
+		'---',
+		'- Armor Class - The damage threshold',
+	].join('\n');
+	const plugin = fakePlugin({ doc });
+	let setWith = '';
+	plugin.set = (c) => {
+		setWith = c;
+	};
+
+	linkTemplateKeywords(plugin);
+
+	assert.equal(setWith.split('\n').slice(0, 6).join('\n'), doc.split('\n').slice(0, 6).join('\n'));
+	assert.match(setWith, /\[\[Armor Class\]\]/);
+});
+
+test('preview presents only template findings when configured', () => {
+	const plugin = fakePlugin({
+		doc: '- Cow - moo\nThe cows grazed. The cows slept.',
+		settings: { previewKeywords: 'template' },
+	});
+
+	processFileAndPreview(plugin);
+
+	assert.deepEqual(
+		plugin.previewSuggestions.map((s) => s.name),
+		['Cow'],
+	);
+});
+
+test('preview presents only nlp findings when configured', () => {
+	const plugin = fakePlugin({
+		doc: '- Cow - moo\nThe cows grazed. The cows slept.',
+		settings: { previewKeywords: 'nlp' },
+	});
+
+	processFileAndPreview(plugin);
+
+	assert.deepEqual(plugin.previewSuggestions.map((s) => s.templates ?? []), [[]]);
+	assert.ok(plugin.previewSuggestions.every((s) => s.nlpRoot));
+});
+
+test('vault scan marks nlpRoot only for nlp-contributed entries', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'a/one.md': '- Cow - moo\nThe cows grazed. The cows slept.',
+			'a/two.md': '- Pig - oink',
+		},
+		settings: { existingMatchMode: 'exact' },
+	});
+
+	await processVaultAndPreview(plugin);
+
+	const byName = new Map(plugin.previewSuggestions.map((s) => [s.name, s]));
+	assert.ok(byName.get('Cow')?.nlpRoot, 'mixed finding keeps nlp root');
+	assert.ok(!byName.get('Pig')?.nlpRoot, 'template-only finding has no nlp root');
+});

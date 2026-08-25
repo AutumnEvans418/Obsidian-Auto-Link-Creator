@@ -94,6 +94,37 @@ test('rejects blank name line (empty draft)', () => {
 	assert.equal(matchTemplate('- ', '- {{Link Name}} - {{Link Content}}'), null);
 });
 
+test('rejects names without any letter (e.g. `--` from frontmatter lists)', () => {
+	assert.equal(matchTemplate('- --', '- {{Link Name}}'), null);
+	assert.ok(matchTemplate('- 123', '- {{Link Name}}', { ignoreDates: false }));
+	assert.equal(matchTemplate('- 123', '- {{Link Name}}'), null);
+	assert.ok(matchTemplate('- Cow', '- {{Link Name}}'));
+});
+
+test('skips YAML frontmatter block entirely', () => {
+	const doc = [
+		'---',
+		'modified:',
+		'  - 2026-08-24T23:47:33-05:00',
+		'created: 2026-08-22T21:02:29-05:00',
+		'- --',
+		'---',
+		'- Real (yes) - is a hit',
+	].join('\n');
+	const all = findAllByTemplates(doc, DEFAULTS, { ignoreDates: true });
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Real');
+});
+
+test('ignoreDates drops date-like names; off keeps them', () => {
+	const doc = '- 2026-08-24 - a date\n- Cow - an animal';
+	assert.equal(findAllByTemplates(doc, DEFAULTS, { ignoreDates: true }).length, 1);
+	const all = findAllByTemplates(doc, DEFAULTS, { ignoreDates: false });
+	assert.equal(all.length, 2);
+	// Lazy capture stops the name at the first `-` separator.
+	assert.equal(all[0]?.name, '2026');
+});
+
 test('ignores template lines inside fenced code block by default', () => {
 	const doc = ['Intro text', '```', '- Fake (no) - not a real hit', '```', '- Real (yes) - is a hit'].join('\n');
 	const all = findAllTemplate(doc, INLINE);

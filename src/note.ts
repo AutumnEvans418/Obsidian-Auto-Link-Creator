@@ -23,8 +23,9 @@ export function noteBody({ alias, aliases, content }: NoteFields): string {
 }
 
 /**
- * Add missing aliases to an existing note's frontmatter. No-op when the note
- * has no YAML frontmatter (or no `aliases` list) or every alias is present.
+ * Add missing aliases to an existing note's frontmatter. Creates an `aliases`
+ * list when the frontmatter lacks one, or prepends frontmatter when the note
+ * has none. No-op when every alias is already present.
  */
 /** Aliases listed in a note's frontmatter (`aliases:` YAML list); [] when none. */
 export function parseFrontmatterAliases(doc: string): string[] {
@@ -55,10 +56,14 @@ export function mergeAliasesIntoDoc(cur: string, newAliases: string[]): string {
 	const keep = [...new Set(newAliases)].filter(Boolean);
 	if (!keep.length) return cur;
 	const fm = /^---\n([\s\S]*?)\n---\n?/.exec(cur);
-	if (!fm) return cur;
+	if (!fm) return `---\naliases:\n${keep.map((a) => `  - ${a}`).join('\n')}\n---\n${cur ? `\n${cur}` : ''}`;
 	const lines = (fm[1] ?? '').split('\n');
 	const idx = lines.findIndex((l) => /^aliases:\s*$/i.test(l.trim()));
-	if (idx === -1) return cur;
+	if (idx === -1) {
+		// Frontmatter exists but has no aliases list — append one to it.
+		const next = [...lines, 'aliases:', ...keep.map((a) => `  - ${a}`)];
+		return `---\n${next.join('\n')}\n---\n${cur.slice(fm[0].length)}`;
+	}
 	const existing = new Set<string>();
 	let lastAliasIdx = idx;
 	for (let j = idx + 1; j < lines.length; j++) {

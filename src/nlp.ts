@@ -5,7 +5,7 @@ import nlp from 'compromise';
  * `changed`/`changing` → `change`, `went` → `go`, `children` → `child`.
  */
 export function rootForm(word: string): string {
-	const json = nlp(word).compute('root').json() as Array<{
+	const json = nlp(word.toLowerCase()).compute('root').json() as Array<{
 		terms?: Array<{ root?: string }>;
 	}>;
 	return json[0]?.terms?.[0]?.root ?? word;
@@ -17,7 +17,8 @@ export function rootForm(word: string): string {
  * to force the noun sense, flip inflection, then strip it.
  */
 function inflectNoun(word: string, makePlural: boolean): string {
-	const nouns = nlp(`the ${word}`).nouns();
+	// compromise fails to inflect Title Case phrases; work in lowercase.
+	const nouns = nlp(`the ${word.toLowerCase()}`).nouns();
 	const inflected = makePlural ? nouns.toPlural() : nouns.toSingular();
 	const out = String(inflected.out('text') ?? '')
 		.trim()

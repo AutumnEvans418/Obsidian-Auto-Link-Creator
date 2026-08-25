@@ -1,4 +1,5 @@
 import { rootForm, titleCase, variantForms } from './nlp.ts';
+import { frontmatterEnd } from './validation.ts';
 
 /** Common English words that carry little keyword signal. */
 const STOPWORDS = new Set([
@@ -64,7 +65,11 @@ function buildCorpus(opts: NlpOptions): Corpus {
 
 /** Count n-grams in a single document into `corpus.groups`. */
 function countText(corpus: Corpus, text: string): void {
-	const words = text
+	// Frontmatter (dates, keys) never counts as prose.
+	const lines = text.split('\n');
+	const fmEnd = frontmatterEnd(lines);
+	const body = fmEnd === -1 ? text : lines.slice(fmEnd + 1).join('\n');
+	const words = body
 		.replace(/```[\s\S]*?```/g, ' ')
 		.replace(/\[\[.*?\]\]/g, ' ')
 		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')

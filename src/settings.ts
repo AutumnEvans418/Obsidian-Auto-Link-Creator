@@ -28,7 +28,17 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Link templates')
 			.setDesc(TEMPLATE_HELP)
-			.setHeading();
+			.setHeading()
+			.addExtraButton((btn) =>
+				btn
+					.setIcon('plus')
+					.setTooltip('Add template')
+					.onClick(async () => {
+						this.plugin.settings.templates.push('');
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
 
 		this.plugin.settings.templates.forEach((tpl, index) => {
 			let field: TextAreaComponent;
@@ -88,6 +98,21 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName('Preview keyword findings')
+			.setDesc('Which findings the preview presents: template lines, repeated-phrase keywords, or both.')
+			.addDropdown((drop) =>
+				drop
+					.addOption('both', 'Both')
+					.addOption('template', 'Template')
+					.addOption('nlp', 'NLP')
+					.setValue(this.plugin.settings.previewKeywords)
+					.onChange(async (value) => {
+						this.plugin.settings.previewKeywords = value as 'both' | 'template' | 'nlp';
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
 			.setName('Extra stop words')
 			.setDesc(
 				'Comma-separated words for NLP keyword detection to ignore. E.g. project, team, feature',
@@ -110,6 +135,18 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.ignoreCodeblocks)
 					.onChange(async (value) => {
 						this.plugin.settings.ignoreCodeblocks = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Ignore dates')
+			.setDesc('Skip date/number-like phrases (e.g. 2026, 2026-08-24) when linking.')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.ignoreDates)
+					.onChange(async (value) => {
+						this.plugin.settings.ignoreDates = value;
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -213,16 +250,5 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-
-		new Setting(containerEl).addExtraButton((btn) =>
-			btn
-				.setIcon('plus')
-				.setTooltip('Add template')
-				.onClick(async () => {
-					this.plugin.settings.templates.push('');
-					await this.plugin.saveSettings();
-					this.display();
-				}),
-		);
 	}
 }

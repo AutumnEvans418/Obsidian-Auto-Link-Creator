@@ -73,8 +73,17 @@ Add test when fixing bugs.
 - [x] Add setting and feature to link existing note based on its file name or list of aliases, following the same capitalization rules if enabled. Instead of replacing a link with a new/non-existing file name, this will search the index for an existing note and use that if it matches. Different options for exact match or nlp root match. Use this plugin for inspiration:  https://github.com/kdnk/obsidian-automatic-linker. This plugin does basically that, except that it doesn't have nlp support.
 
 - [x] Preserve scroll position on save.
-- [ ] On save when dealing with checking for existing notes should use nlp to find close matches, such as plurals, and link them, if the setting is enabled. Armor Classes -> Armor Class (existing note)
-- [ ] Bug: Add template is at the bottom of settings rather than other the template list.
+- [x] On save when dealing with checking for existing notes should use nlp to find close matches, such as plurals, and link them, if the setting is enabled. Armor Classes -> Armor Class (existing note)
+- [x] Bug: Add template is at the bottom of settings rather than other the template list.
+- [x] Bug: "Process current file and preview links" creates the suggested file, but doesn't actually create the link in the current file. Additionally, "--" was included as a keyword, which is unexpected.
+  - Fix: after creating notes, an `applyExistingLinks` pass links selected names/aliases in the source doc (NLP suggestions have no positional hits); template finders reject punctuation-only names like `--`.
+- [x] Bug: On save, front matter gets converted to links, which is unexpected.
+  - Fix: YAML frontmatter block is always skipped by template scanning and NLP keyword counting; new **Ignore dates** setting (default on) drops date/number-like phrases (`2026`, `2026-08-24T…`).
+
+- [x] Feature: Update the preview to present nlp, template, or both (default) keyword findings.
+  - Fix: **Preview keyword findings** dropdown setting (`previewKeywords: 'both' | 'template' | 'nlp'`); `filterByPreviewMode` (src/ui/suggestion.ts) filters by provenance fields before preview in both preview flows; vault collector sets `nlpRoot` only when the NLP pass contributed.
+
+- [ ] Feature: Create a setting in which you can set a folder for which new notes should be added to. Defaults to the current folder of the current note. There is another setting for two options. Subfolder, or Closest Shared Folder. If subfolder and set to "Concepts", then a "Concepts" subfolder will be created in the current note directory. If it's "Concepts" and set to closest shared, then it will check for the closest existing "Concepts" folder in the current dir and work up the parent tree. If none is found, then it will prompt for where to create it.
 
 ## Commands (npm)
 

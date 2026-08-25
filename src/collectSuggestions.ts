@@ -1,5 +1,5 @@
 import { type ParsedTemplate, groupByReference, groupContent } from './template.ts';
-import { sameReference } from './nlp.ts';
+import { sameReference, variantForms } from './nlp.ts';
 import type { Suggestion } from './ui/suggestion.ts';
 
 /**
@@ -10,7 +10,11 @@ export function collectSuggestions(hits: ParsedTemplate[], file?: string): Sugge
 	return groupByReference(hits).map((group) => {
 		const lead = group[0];
 		const rest = group.slice(1);
-		const aliases = rest.map((h) => h.name).filter((n) => n !== lead?.name);
+		// Variant forms (plural/singular/root) so created notes carry aliases
+		// even when the suggestion came from template hits alone.
+		const leadName = lead?.name ?? '';
+		const aliases = [...new Set([...rest.map((h) => h.name), ...variantForms(leadName)])]
+			.filter((n) => n && n.toLowerCase() !== leadName.toLowerCase());
 		// Fold variant hits onto the lead name so applyLinks emits
 		// [[Lead|Variant]] instead of a self-link to the variant.
 		for (const h of rest) {

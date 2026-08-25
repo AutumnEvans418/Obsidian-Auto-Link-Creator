@@ -52,9 +52,19 @@ test('mergeAliasesIntoDoc no-ops when aliases already present', () => {
 	assert.equal(mergeAliasesIntoDoc(cur, ['AC']), cur);
 });
 
-test('mergeAliasesIntoDoc no-ops without frontmatter or aliases key', () => {
-	assert.equal(mergeAliasesIntoDoc('Just body\n', ['AC']), 'Just body\n');
-	assert.equal(mergeAliasesIntoDoc('---\ntitle: X\n---\n', ['AC']), '---\ntitle: X\n---\n');
+test('mergeAliasesIntoDoc creates aliases list when frontmatter lacks one', () => {
+	assert.equal(
+		mergeAliasesIntoDoc('---\nmodified:\n  - 2026-08-24\n---\nBody\n', ['AC']),
+		'---\nmodified:\n  - 2026-08-24\naliases:\n  - AC\n---\nBody\n',
+	);
+});
+
+test('mergeAliasesIntoDoc prepends frontmatter when note has none', () => {
+	assert.equal(
+		mergeAliasesIntoDoc('Just body\n', ['AC']),
+		'---\naliases:\n  - AC\n---\n\nJust body\n',
+	);
+	assert.equal(mergeAliasesIntoDoc('', ['AC']), '---\naliases:\n  - AC\n---\n');
 });
 
 test('mergeContent skips empty content and empty base', () => {

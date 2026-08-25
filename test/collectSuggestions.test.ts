@@ -16,8 +16,14 @@ test('collectSuggestions folds variant hits onto the lead name', () => {
 	const out = collectSuggestions([hit('Armor Class', 0), hit('Armor Classes', 1)]);
 	assert.equal(out.length, 1);
 	assert.equal(out[0]?.name, 'Armor Class');
-	assert.deepEqual(out[0]?.aliases, ['Armor Classes']);
+	assert.ok(out[0]?.aliases.includes('Armor Classes'));
 	assert.equal(out[0]?.hits[1]?.target, 'Armor Class');
+});
+
+test('collectSuggestions adds variant-form aliases to template-only suggestions', () => {
+	const out = collectSuggestions([hit('Service Level Agreement')]);
+	assert.equal(out.length, 1);
+	assert.ok(out[0]?.aliases.includes('service level agreements'));
 });
 
 test('dedupeSuggestions merges same-reference suggestions', () => {

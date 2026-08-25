@@ -72,3 +72,16 @@ test('per-file scan still applies minFreq within each document', () => {
 	const out = extractKeywordsFromDocs(['gadget here', 'other stuff'], { minFreq: 3 });
 	assert.ok(!out.some((k) => k.name.toLowerCase() === 'gadget'));
 });
+
+test('frontmatter prose is not counted as keywords', () => {
+	const doc = [
+		'---',
+		'tags: [gadget, widget]',
+		'description: gadget gadget widget',
+		'---',
+		'widget here and widget there',
+	].join('\n');
+	const out = extractKeywords(doc);
+	assert.ok(!out.some((k) => k.name.toLowerCase() === 'gadget'));
+	assert.ok(out.some((k) => k.name.toLowerCase() === 'widget'), 'body words still count');
+});

@@ -1,5 +1,6 @@
 import { sameReference } from './nlp.ts';
 import { overlapsExistingLink } from './linkDetector.ts';
+import { frontmatterEnd, isDateLike } from './validation.ts';
 
 export interface ParsedTemplate {
 	name: string;
@@ -112,6 +113,17 @@ export interface TemplateOptions {
 	 * re-running on already-linked output is a no-op. Default true.
 	 */
 	skipLinked?: boolean;
+	/** Skip hits whose name is date/number-like (e.g. `2026-08-24`). */
+	ignoreDates?: boolean;
+}
+
+/** True when a matched name should be dropped: junk (`--`) or date-like. */
+function rejectedName(name: string, opts: TemplateOptions): boolean {
+	const ignoreDates = opts.ignoreDates ?? true;
+	// Punctuation-only junk ("--") is never a link name; numeric/date-like
+	// names ("2026", "2026-08-24T…") follow the ignore-dates setting.
+	if (!/\p{L}/u.test(name)) return !/\d/.test(name) || ignoreDates;
+	return ignoreDates && isDateLike(name);
 }
 
 /** True when `line` is a ``` fence (opening or closing), optionally with a lang tag. */
@@ -135,6 +147,7 @@ export function findAllTemplate(
 	const lines = text.split('\n');
 	const skipFence = opts.ignoreCodeblocks ?? true;
 	const skipLinked = opts.skipLinked ?? true;
+	const fmEnd = frontmatterEnd(lines);
 	let skipUntil = 0;
 	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
@@ -147,9 +160,10 @@ export function findAllTemplate(
 			}
 			if (inFence) continue;
 		}
-		if (i < skipUntil) continue;
+		if (i <= fmEnd || i < skipUntil) continue;
 		const r = parseAt(c, lines, i, skipLinked);
 		if (r) {
+			if (rejectedName(r.hit.name, opts)) continue;
 			out.push({ ...r.hit, template: tpl });
 			if (r.childCount) skipUntil = i + 1 + r.childCount;
 		}
@@ -177,6 +191,7 @@ export function findAllByTemplates(
 	const out: ParsedTemplate[] = [];
 	const skipFence = opts.ignoreCodeblocks ?? true;
 	const skipLinked = opts.skipLinked ?? true;
+	const fmEnd = frontmatterEnd(lines);
 	let skipUntil = 0;
 	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
@@ -189,10 +204,11 @@ export function findAllByTemplates(
 			}
 			if (inFence) continue;
 		}
-		if (i < skipUntil) continue;
+		if (i <= fmEnd || i < skipUntil) continue;
 		for (const c of comps) {
 			const r = parseAt(c, lines, i, skipLinked);
 			if (!r) continue;
+			if (rejectedName(r.hit.name, opts)) break;
 			out.push({ ...r.hit, template: c.template });
 			if (r.childCount) skipUntil = i + 1 + r.childCount;
 			break;
@@ -211,6 +227,7 @@ export function matchTemplate(
 	const lines = text.split('\n');
 	const skipFence = opts.ignoreCodeblocks ?? true;
 	const skipLinked = opts.skipLinked ?? true;
+	const fmEnd = frontmatterEnd(lines);
 	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
@@ -222,8 +239,12 @@ export function matchTemplate(
 			}
 			if (inFence) continue;
 		}
+		if (i <= fmEnd) continue;
 		const r = parseAt(c, lines, i, skipLinked);
-		if (r) return { ...r.hit, template: tpl };
+		if (r) {
+			if (rejectedName(r.hit.name, opts)) continue;
+			return { ...r.hit, template: tpl };
+		}
 	}
 	return null;
 }
