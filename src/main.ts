@@ -125,7 +125,6 @@ export default class AutoLinkCreator extends Plugin {
 				if (!editor) return;
 				const scroll = editor.getScrollInfo?.();
 				const cursor = editor.getCursor?.('head');
-				// Transaction keeps cursor + scroll; setValue resets to top.
 				if (editor.transaction && editor.offsetToPos) {
 					editor.transaction({
 						changes: [
@@ -139,10 +138,11 @@ export default class AutoLinkCreator extends Plugin {
 				} else {
 					editor.setValue(content);
 				}
-				// A whole-document change remaps the cursor and can drag the
-				// viewport with it; put both back where the user had them.
-				if (scroll && editor.scrollTo) editor.scrollTo(scroll.top, scroll.left);
-				if (cursor && editor.setCursor) editor.setCursor(cursor);
+				// Defer restore so Obsidian's post-save layout settles first.
+				requestAnimationFrame(() => {
+					if (scroll && editor.scrollTo) editor.scrollTo(scroll.top, scroll.left);
+					if (cursor && editor.setCursor) editor.setCursor(cursor);
+				});
 			},
 			notice: (msg) => new Notice(msg),
 			get settings() {
@@ -160,6 +160,13 @@ export default class AutoLinkCreator extends Plugin {
 				const a: unknown = fm?.['aliases'];
 				if (!a) return [];
 				return (Array.isArray(a) ? a : [a]).map(String).filter(Boolean);
+			},
+			unresolvedLinks: () => {
+				const names = new Set<string>();
+				for (const source of Object.values(app.metadataCache.unresolvedLinks)) {
+					for (const target of Object.keys(source)) names.add(target);
+				}
+				return [...names];
 			},
 			read: (f) =>
 				typeof f === 'string'

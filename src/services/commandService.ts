@@ -224,7 +224,18 @@ export function linkExistingNotes(plugin: IPlugin): void {
 		basename: f.basename,
 		aliases: plugin.noteAliases(f.path),
 	}));
-	const index = buildNoteIndex(entries, plugin.settings.existingMatchMode);
+	const index = buildNoteIndex(entries, plugin.settings.existingMatchMode, source);
+	if (plugin.settings.linkUnresolved) {
+		for (const name of plugin.unresolvedLinks()) {
+			const forms =
+				plugin.settings.existingMatchMode === 'root'
+					? variantForms(name.toLowerCase())
+					: [name.toLowerCase()];
+			for (const key of forms) {
+				if (!index.has(key)) index.set(key, name);
+			}
+		}
+	}
 	if (!index.size) {
 		plugin.notice('No notes found to link.');
 		return;

@@ -268,5 +268,19 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(containerEl)
+			.setName('Link unresolved wikilinks')
+			.setDesc(
+				'Also index link targets from wikilinks whose notes do not exist yet (e.g. [[FileB]] in another file) so plain-text mentions of those names get linked too.',
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.linkUnresolved)
+					.onChange(async (value) => {
+						this.plugin.settings.linkUnresolved = value;
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 }

@@ -86,6 +86,14 @@ Add test when fixing bugs.
 - [x] Feature: Create a setting in which you can set a folder for which new notes should be added to. Defaults to the current folder of the current note. There is another setting for two options. Subfolder, or Closest Shared Folder. If subfolder and set to "Concepts", then a "Concepts" subfolder will be created in the current note directory. If it's "Concepts" and set to closest shared, then it will check for the closest existing "Concepts" folder in the current dir and work up the parent tree. If none is found, then it will prompt for where to create it.
   - Fix: **New note folder** setting (blank = source note's folder) + **New folder mode** dropdown (Subfolder default / Closest shared folder). Pure `resolveTargetFolder` (src/folders.ts); `targetFolder()` in commandService resolves per apply run — closest-miss prompts once per run via `promptFolder` (modal in main.ts), cancel falls back to subfolder. Vault flow applies it to each group's targetFolder. Facade `create` now mkdirs missing parents; manifest minAppVersion bumped 1.1.0→1.4.0 (Vault.createFolder).
 
+- [x] Bug: Update existing links on save should maintain scroll.
+  - Fix: defer scroll/cursor restore in `set()` via `requestAnimationFrame` so Obsidian's post-save layout settles first.
+- [x] Feature: Update on save should match the longest existing link/file/alias. For example, if the text says "Information Assets" and the following links exist: "Information", "Information Assets", "Information Assets" should be the link that created.
+  - Fix: sort tiebreaker in `applyExistingLinks` (`b.end - a.end`) ensures longest match at same start position wins; overlap rejection then drops shorter candidates.
+
+- [x] Feature: Proximity note wins.
+- [x] Feature: Link unresolved links.
+
 ## Commands (npm)
 
 ```bash

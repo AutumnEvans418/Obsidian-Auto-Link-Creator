@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS } from '../src/settingsSchema.ts';
 import type { AutoLinkSettings } from '../src/settingsSchema.ts';
-import { linkTemplateKeywords, processFileAndPreview, processVaultAndPreview } from '../src/services/commandService.ts';
+import { linkExistingNotes, linkTemplateKeywords, processFileAndPreview, processVaultAndPreview } from '../src/services/commandService.ts';
 import type { IPlugin } from '../src/services/ipluginInterface.ts';
 import type { Suggestion } from '../src/ui/suggestion.ts';
 
@@ -14,6 +14,7 @@ function fakePlugin(opts: {
 	source?: string;
 	folders?: string[];
 	promptFolder?: (def: string) => Promise<string | null>;
+	unresolved?: string[];
 } = {}) {
 	const files = new Map(Object.entries(opts.files ?? {}));
 	const notices: string[] = [];
@@ -43,6 +44,7 @@ function fakePlugin(opts: {
 		getFiles: async () => [...files.keys()],
 		getFileByPath: (p) => (files.has(p) ? ({ path: p } as never) : null),
 		noteAliases: () => [],
+		unresolvedLinks: () => opts.unresolved ?? [],
 		read: async (f) =>
 			files.get(typeof f === 'string' ? f : f.path) ?? '',
 		write: async (p, data) => {
@@ -265,4 +267,52 @@ test('closest mode prompts when nothing matches and honors the answer', async ()
 
 	assert.equal(promptedWith, 'a/Concepts', 'prompt defaults to subfolder path');
 	assert.ok(plugin.getFileByPath('Picked/Place/Cow.md'), 'note created at chosen path');
+});
+
+test('linkExistingNotes links unresolved wikilink targets', () => {
+	let setWith = '';
+	const plugin = fakePlugin({
+		doc: 'FileB is important here',
+		source: 'notes/FileC.md',
+		unresolved: ['FileB'],
+		settings: { enableExistingLinks: true, linkUnresolved: true },
+	});
+	plugin.set = (c) => { setWith = c; };
+
+	linkExistingNotes(plugin);
+
+	assert.match(setWith, /\[\[FileB\]\] is important here/);
+});
+
+test('linkExistingNotes does not link unresolved when setting is off', () => {
+	let setWith = '';
+	const plugin = fakePlugin({
+		doc: 'FileB is important here',
+		source: 'notes/FileC.md',
+		unresolved: ['FileB'],
+		settings: { enableExistingLinks: true, linkUnresolved: false },
+	});
+	plugin.set = (c) => { setWith = c; };
+
+	linkExistingNotes(plugin);
+
+	assert.equal(setWith, '', 'no set call when linkUnresolved is off');
+});
+
+test('linkExistingNotes: real file takes precedence over unresolved link', () => {
+	let setWith = '';
+	const plugin = fakePlugin({
+		doc: 'FileB is here',
+		files: { 'b/FileB.md': 'content' },
+		source: 'notes/Other.md',
+		unresolved: ['FileB'],
+		settings: { enableExistingLinks: true, linkUnresolved: true },
+	});
+	plugin.set = (c) => { setWith = c; };
+
+	linkExistingNotes(plugin);
+
+	// Real file basename "FileB" should be used (not an unresolved entry).
+	assert.match(setWith, /\[\[FileB\]\] is here/);
+	assert.ok(plugin.getFileByPath('b/FileB.md'), 'real file exists');
 });

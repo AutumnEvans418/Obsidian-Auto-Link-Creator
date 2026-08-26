@@ -26,6 +26,8 @@ export interface AutoLinkSettings {
 	existingMatchMode: 'exact' | 'root';
 	/** Auto-link existing-note matches when the active note is saved. */
 	existingOnSave: boolean;
+	/** Also index unresolved wikilinks (links to files that don't exist yet). */
+	linkUnresolved: boolean;
 	/** Folder name new notes go into ('' = the source note's own folder). */
 	newNoteFolder: string;
 	/** How `newNoteFolder` resolves: create a subfolder, or reuse the closest existing one. */
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	enableExistingLinks: true,
 	existingMatchMode: 'exact',
 	existingOnSave: false,
+	linkUnresolved: true,
 	newNoteFolder: '',
 	newFolderMode: 'subfolder',
 };

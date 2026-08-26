@@ -89,6 +89,17 @@ test('longer key wins over shorter overlapping key', () => {
 	assert.equal(res.count, 1);
 });
 
+test('Information Assets matches longer note, not shorter Information', () => {
+	const info = [
+		{ path: 'notes/Information.md', basename: 'Information', aliases: [] },
+		{ path: 'notes/Information Assets.md', basename: 'Information Assets', aliases: [] },
+	];
+	const idx = buildNoteIndex(info, 'exact');
+	const res = applyExistingLinks('Information Assets are critical', idx, { capitalize: false });
+	assert.match(res.updated, /\[\[Information Assets\]\] are critical/);
+	assert.equal(res.count, 1);
+});
+
 test('foldHitTargets folds variant names onto existing notes', () => {
 	const idx = buildNoteIndex(entries, 'root');
 	const hits = [
@@ -114,4 +125,26 @@ test('foldHitTargets respects exact mode (no variant folding)', () => {
 	] as Parameters<typeof foldHitTargets>[0];
 	foldHitTargets(hits, idx, 'exact');
 	assert.equal(hits[0]?.target, undefined);
+});
+
+test('buildNoteIndex with currentPath prefers closest note', () => {
+	const dupes = [
+		{ path: 'x/Cow.md', basename: 'Far Cow', aliases: ['Cow'] },
+		{ path: 'same/dir/Cow.md', basename: 'Near Cow', aliases: ['Cow'] },
+		{ path: 'same/dir/other/Cow.md', basename: 'Mid Cow', aliases: ['Cow'] },
+	];
+	const idx = buildNoteIndex(dupes, 'exact', 'same/dir/note.md');
+	// same/dir/Cow.md and same/dir/other/Cow.md share prefix depth 2 with same/dir/.
+	// Alphabetical tiebreak: same/dir/Cow.md < same/dir/other/Cow.md → Near Cow wins.
+	assert.equal(idx.get('cow'), 'Near Cow');
+});
+
+test('buildNoteIndex without currentPath falls back to alphabetical', () => {
+	const dupes = [
+		{ path: 'z/Cow.md', basename: 'Z Cow', aliases: ['Cow'] },
+		{ path: 'a/Cow.md', basename: 'A Cow', aliases: ['Cow'] },
+	];
+	const idx = buildNoteIndex(dupes, 'exact');
+	// Alphabetical: a/Cow.md < z/Cow.md → A Cow wins.
+	assert.equal(idx.get('cow'), 'A Cow');
 });

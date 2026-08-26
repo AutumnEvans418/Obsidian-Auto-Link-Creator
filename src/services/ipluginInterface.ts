@@ -46,6 +46,8 @@ export interface IPlugin {
 	getFileByPath(path: string): TFile | null;
 	/** Aliases of a note from the metadata cache's frontmatter index. */
 	noteAliases(path: string): string[];
+	/** Unique link targets from wikilinks whose notes do not exist yet. */
+	unresolvedLinks(): string[];
 	read(fileOrPath: TFile | string): Promise<string>;
 	write(path: string, data: string): Promise<void>;
 	modify(file: TFile, data: string): Promise<void>;
