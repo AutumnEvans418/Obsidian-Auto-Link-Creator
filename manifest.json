@@ -2,7 +2,7 @@
 	"id": "Obsidian-Auto-Link-Creator",
 	"name": "Auto Link Creator",
 	"version": "1.0.0",
-	"minAppVersion": "1.1.0",
+	"minAppVersion": "1.4.0",
 	"description": "A linker that automatically creates obsidian links based on formatting, templates, word count, and NLP algorithms. Unlike other linkers that only updates notes with existing links. Suggests links based on the entire vault. Supports aliases. Works great with obsidian-automatic-linker",
 	"author": "Autumn Fox",
 	"authorUrl": "https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator",

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closestCommonFolder } from '../src/folders.ts';
+import { closestCommonFolder, resolveTargetFolder } from '../src/folders.ts';
 
 test('single file → its own folder', () => {
 	assert.equal(closestCommonFolder(['a/b/note.md']), 'a/b');
@@ -24,4 +24,32 @@ test('no common folder → empty string', () => {
 
 test('empty input → empty string', () => {
 	assert.equal(closestCommonFolder([]), '');
+});
+
+test('resolveTargetFolder blank name keeps base', () => {
+	assert.equal(resolveTargetFolder('a/b', '', 'subfolder', () => true), 'a/b');
+});
+
+test('resolveTargetFolder subfolder appends to base', () => {
+	const never = () => {
+		throw new Error('should not check existence');
+	};
+	assert.equal(resolveTargetFolder('a/b', 'Concepts', 'subfolder', never), 'a/b/Concepts');
+	assert.equal(resolveTargetFolder('', 'Concepts', 'subfolder', never), 'Concepts');
+});
+
+test('resolveTargetFolder closest finds deepest match walking up', () => {
+	// Only the root-level Concepts exists.
+	const exists = (p: string) => p === 'Concepts';
+	assert.equal(resolveTargetFolder('a/b/c', 'Concepts', 'closest', exists), 'Concepts');
+	// Deepest existing wins.
+	const deep = (p: string) => p === 'a/b/Concepts';
+	assert.equal(resolveTargetFolder('a/b/c', 'Concepts', 'closest', deep), 'a/b/Concepts');
+});
+
+test('resolveTargetFolder closest returns null when nothing matches', () => {
+	assert.equal(
+		resolveTargetFolder('a/b', 'Missing', 'closest', () => false),
+		null,
+	);
 });

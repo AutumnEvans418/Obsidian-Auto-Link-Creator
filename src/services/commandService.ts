@@ -1,6 +1,7 @@
 import { collectSuggestions, dedupeSuggestions } from "../collectSuggestions.ts";
 import { collectVaultSuggestions } from "../collectVaultSuggestions.ts";
 import { createNote } from "../creator.ts";
+import { resolveTargetFolder } from "../folders.ts";
 import { applyExistingLinks, buildNoteIndex, foldHitTargets } from "../existingLinks.ts";
 import type { IndexEntry } from "../existingLinks.ts";
 import { applyLinks } from "../link.ts";
@@ -43,6 +44,28 @@ function groupIndex(groups: Array<{ name: string; aliases: string[] }>): Map<str
 		}
 	}
 	return idx;
+}
+
+/**
+ * Folder new notes go into per `newNoteFolder`/`newFolderMode`. When the
+ * closest-mode search finds nothing, prompt once per apply run and reuse
+ * the answer for later groups; cancel/no-prompt falls back to a subfolder.
+ */
+async function targetFolder(
+	plugin: IPlugin,
+	base: string,
+	promptCache: { value?: string | null },
+): Promise<string> {
+	const name = plugin.settings.newNoteFolder;
+	let resolved = resolveTargetFolder(base, name, plugin.settings.newFolderMode, (p) =>
+		plugin.folderExists?.(p) ?? false,
+	);
+	if (resolved === null && plugin.promptFolder) {
+		if (promptCache.value === undefined)
+			promptCache.value = await plugin.promptFolder(base ? `${base}/${name}` : name);
+		resolved = promptCache.value;
+	}
+	return resolved ?? (base ? `${base}/${name}` : name);
 }
 
 /** Rewrite template keyword lines in `plugin`'s doc into wiki links, idempotently. */
@@ -94,11 +117,12 @@ export function processFileAndPreview(plugin: IPlugin): void {
 				.map((i) => suggestions[i])
 				.filter((s): s is Suggestion => !!s),
 		);
+		const dest = await targetFolder(plugin, folder, {});
 		for (const g of groups) {
 			try {
 				const res = await createNote(
 					plugin,
-					folder,
+					dest,
 					{ name: g.name, content: g.content, aliases: g.aliases },
 					plugin.settings.capitalize,
 					onWrite,
@@ -144,6 +168,7 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 		const onWrite = plugin.undoableWriter();
 		let created = 0;
 		let appended = 0;
+		const promptCache: { value?: string | null } = {};
 		const groups = dedupeSuggestions(
 			indices
 				.map((i) => suggestions[i])
@@ -153,7 +178,7 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 			try {
 				const res = await createNote(
 					plugin,
-					g.targetFolder ?? '',
+					await targetFolder(plugin, g.targetFolder ?? '', promptCache),
 					{ name: g.name, content: g.content, aliases: g.aliases },
 					plugin.settings.capitalize,
 					onWrite,

@@ -1,9 +1,12 @@
 import {
 	Editor,
 	MarkdownView,
+	Modal,
 	Notice,
 	Plugin,
 	TFile,
+	TFolder,
+	type App,
 	type MarkdownFileInfo,
 	type OpenViewState,
 } from 'obsidian';
@@ -18,6 +21,53 @@ import {
 } from './services/commandService.ts';
 import type { IEditorView, IPlugin } from './services/ipluginInterface.ts';
 
+/** Blocking indicator shown while a preview scan runs. */
+class LoadingModal extends Modal {
+	constructor(
+		app: App,
+		private label: string,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText('Auto link creator');
+		this.contentEl.createDiv('alcm-loading');
+		const text = this.contentEl.createDiv('alcm-loading-text');
+		text.setText(this.label);
+	}
+}
+
+/** Ask the user for a folder path; resolves null on cancel/empty. */
+class FolderPromptModal extends Modal {
+	constructor(
+		app: App,
+		private def: string,
+		private done: (value: string | null) => void,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText('Folder for new notes');
+		const input = this.contentEl.createEl('input', { type: 'text' });
+		input.value = this.def;
+		input.addClass('alcm-folder-input');
+		const submit = () => {
+			const v = input.value.trim();
+			this.close();
+			this.done(v || null);
+		};
+		const btns = this.contentEl.createDiv('modal-button-container');
+		const ok = btns.createEl('button', { text: 'Create here' });
+		ok.addClass('mod-cta');
+		ok.addEventListener('click', submit);
+		input.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') submit();
+		});
+	}
+}
+
 export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
 	private originalSaveCallback: ((checking: boolean) => boolean | void) | undefined;
@@ -27,6 +77,20 @@ export default class AutoLinkCreator extends Plugin {
 	 * Obsidian-backed implementation of the service facade. Everything
 	 * Obsidian-specific lives here; services stay unit-testable.
 	 */
+	/** Show a loading modal for the duration of an async scan. */
+	private async withLoading(label: string, run: () => void | Promise<void>): Promise<void> {
+		const loading = new LoadingModal(this.app, label);
+		loading.open();
+		// The scan blocks the thread; yield a frame so the modal paints first.
+		await new Promise<void>((r) =>
+			window.requestAnimationFrame(() => window.setTimeout(r, 0)));
+		try {
+			await run();
+		} finally {
+			loading.close();
+		}
+	}
+
 	private facade(
 		editor?: IEditorView,
 		filePath = '',
@@ -59,6 +123,8 @@ export default class AutoLinkCreator extends Plugin {
 			value: () => editor?.getValue() ?? '',
 			set: (content) => {
 				if (!editor) return;
+				const scroll = editor.getScrollInfo?.();
+				const cursor = editor.getCursor?.('head');
 				// Transaction keeps cursor + scroll; setValue resets to top.
 				if (editor.transaction && editor.offsetToPos) {
 					editor.transaction({
@@ -73,6 +139,10 @@ export default class AutoLinkCreator extends Plugin {
 				} else {
 					editor.setValue(content);
 				}
+				// A whole-document change remaps the cursor and can drag the
+				// viewport with it; put both back where the user had them.
+				if (scroll && editor.scrollTo) editor.scrollTo(scroll.top, scroll.left);
+				if (cursor && editor.setCursor) editor.setCursor(cursor);
 			},
 			notice: (msg) => new Notice(msg),
 			get settings() {
@@ -101,7 +171,22 @@ export default class AutoLinkCreator extends Plugin {
 				else await app.vault.create(path, data);
 			},
 			modify: (file, data) => app.vault.modify(file, data),
-			create: (path, data) => app.vault.create(path, data),
+			create: async (path, data) => {
+				// New-note folders may not exist yet (e.g. a Concepts subfolder).
+				const cut = path.lastIndexOf('/');
+				if (cut > 0 && !app.vault.getAbstractFileByPath(path.slice(0, cut)))
+					await app.vault.createFolder(path.slice(0, cut));
+				return app.vault.create(path, data);
+			},
+			folderExists: (p) => {
+				if (!p) return true;
+				const f = app.vault.getAbstractFileByPath(p);
+				return f instanceof TFolder;
+			},
+			promptFolder: (def) =>
+				new Promise<string | null>((resolve) =>
+					new FolderPromptModal(app, def, resolve).open(),
+				),
 
 			openFile: openInLeaf,
 			undoableWriter: () => {
@@ -168,12 +253,13 @@ export default class AutoLinkCreator extends Plugin {
 		this.addCommand({
 			id: 'preview-create-notes',
 			name: 'Process current file and preview links',
-			editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-				processFileAndPreview(this.facade(editor, ctx.file?.path ?? ''));
-			},
-		});
+		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+			void this.withLoading('Scanning current file…', () =>
+				processFileAndPreview(this.facade(editor, ctx.file?.path ?? '')));
+		},
+	});
 
-		// Link plain-text phrases that match existing note names/aliases.
+	// Link plain-text phrases that match existing note names/aliases.
 		this.addCommand({
 			id: 'link-existing-notes',
 			name: 'Link existing notes in current file',
@@ -187,9 +273,9 @@ export default class AutoLinkCreator extends Plugin {
 		this.addCommand({
 			id: 'process-whole-vault',
 			name: 'Process whole vault and preview links',
-			callback: () => {
-				void processVaultAndPreview(this.facade());
-			},
+		callback: () => {
+			void this.withLoading('Scanning vault…', () => processVaultAndPreview(this.facade()));
+		},
 		});
 
 		// Status bar trigger for the current-file preview (not available on mobile).
@@ -202,7 +288,8 @@ export default class AutoLinkCreator extends Plugin {
 				new Notice('Auto link creator: no active Markdown file');
 				return;
 			}
-			processFileAndPreview(this.facade(view.editor, view.file?.path ?? ''));
+			void this.withLoading('Scanning current file…', () =>
+				processFileAndPreview(this.facade(view.editor, view.file?.path ?? '')));
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin

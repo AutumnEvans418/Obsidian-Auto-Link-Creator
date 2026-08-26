@@ -1,8 +1,29 @@
-/*
+/* Folder prompt modal: full-width path input. */
+.alcm-folder-input {
+	width: 100%;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
-*/
+/* Loading modal: spinner + label. */
+.alcm-loading {
+	display: flex;
+	justify-content: center;
+	padding: 12px 0;
+}
+.alcm-loading::after {
+	content: '';
+	width: 24px;
+	height: 24px;
+	border: 3px solid var(--background-modifier-border);
+	border-top-color: var(--interactive-accent);
+	border-radius: 50%;
+	animation: alcm-spin 0.8s linear infinite;
+}
+.alcm-loading-text {
+	text-align: center;
+	color: var(--text-muted);
+}
+@keyframes alcm-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}

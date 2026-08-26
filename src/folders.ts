@@ -17,3 +17,28 @@ export function closestCommonFolder(paths: string[]): string {
 	}
 	return common.join('/');
 }
+
+export type NewFolderMode = 'subfolder' | 'closest';
+
+/**
+ * Resolve the folder new notes go into. Blank `name` keeps `base` (the
+ * source note's own folder). 'subfolder' yields `<base>/<name>`; 'closest'
+ * walks up from `base` to the nearest existing `<ancestor>/<name>` folder
+ * and returns null when none exists (caller prompts for a location).
+ */
+export function resolveTargetFolder(
+	base: string,
+	name: string,
+	mode: NewFolderMode,
+	exists: (path: string) => boolean,
+): string | null {
+	const clean = name.trim().replace(/^\/+|\/+$/g, '');
+	if (!clean) return base;
+	if (mode === 'subfolder') return base ? `${base}/${clean}` : clean;
+	const parts = base ? base.split('/') : [];
+	for (let i = parts.length; i >= 0; i--) {
+		const candidate = [...parts.slice(0, i), clean].join('/');
+		if (exists(candidate)) return candidate;
+	}
+	return null;
+}

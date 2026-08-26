@@ -15,6 +15,11 @@ export interface IEditorView {
 			text: string | string[];
 		}[];
 	}): void;
+	/** Obsidian Editor only; used to restore the viewport after a write. */
+	getScrollInfo?(): { top: number; left: number };
+	scrollTo?(top: number, left?: number): void;
+	getCursor?(from?: 'from' | 'to' | 'head'): { line: number; ch: number };
+	setCursor?(pos: { line: number; ch: number }): void;
 }
 
 /**
@@ -45,6 +50,15 @@ export interface IPlugin {
 	write(path: string, data: string): Promise<void>;
 	modify(file: TFile, data: string): Promise<void>;
 	create(path: string, data: string): Promise<TFile>;
+
+	// --- folder placement ---
+	/** True when a folder exists at `path` (vault root '' always exists). */
+	folderExists?(path: string): boolean;
+	/**
+	 * Ask the user where to create notes; resolves the chosen path or null
+	 * on cancel. Optional: absent in tests, which fall back to a subfolder.
+	 */
+	promptFolder?(defaultPath: string): Promise<string | null>;
 
 	// --- workspace ---
 	openFile(file: TFile, state?: OpenViewState): Promise<IEditorView>;

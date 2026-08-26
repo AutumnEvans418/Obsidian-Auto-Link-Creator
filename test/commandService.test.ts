@@ -12,6 +12,8 @@ function fakePlugin(opts: {
 	files?: Record<string, string>;
 	settings?: Partial<AutoLinkSettings>;
 	source?: string;
+	folders?: string[];
+	promptFolder?: (def: string) => Promise<string | null>;
 } = {}) {
 	const files = new Map(Object.entries(opts.files ?? {}));
 	const notices: string[] = [];
@@ -54,6 +56,8 @@ function fakePlugin(opts: {
 			files.set(p, data);
 			return { path: p, basename: p, parent: null } as never;
 		},
+		folderExists: opts.folders ? (p) => opts.folders!.includes(p) : undefined,
+		promptFolder: opts.promptFolder,
 		openFile: async () => {
 			throw new Error('not implemented in fake');
 		},
@@ -241,4 +245,50 @@ test('vault scan marks nlpRoot only for nlp-contributed entries', async () => {
 	const byName = new Map(plugin.previewSuggestions.map((s) => [s.name, s]));
 	assert.ok(byName.get('Cow')?.nlpRoot, 'mixed finding keeps nlp root');
 	assert.ok(!byName.get('Pig')?.nlpRoot, 'template-only finding has no nlp root');
+});
+
+test('new notes go into the configured subfolder', async () => {
+	const plugin = fakePlugin({
+		doc: '- Cow - moo',
+		settings: { enableNlpKeywords: false, newNoteFolder: 'Concepts' },
+	});
+
+	processFileAndPreview(plugin);
+	await plugin.applyPreview([0]);
+
+	assert.ok(plugin.getFileByPath('a/Concepts/Cow.md'), 'note created in subfolder');
+});
+
+test('closest mode reuses the nearest existing folder walking up', async () => {
+	const plugin = fakePlugin({
+		doc: '- Cow - moo',
+		folders: ['Concepts'],
+		promptFolder: async () => {
+			throw new Error('should not prompt when a match exists');
+		},
+		settings: { enableNlpKeywords: false, newNoteFolder: 'Concepts', newFolderMode: 'closest' },
+	});
+
+	processFileAndPreview(plugin);
+	await plugin.applyPreview([0]);
+
+	assert.ok(plugin.getFileByPath('Concepts/Cow.md'), 'note created in closest match');
+});
+
+test('closest mode prompts when nothing matches and honors the answer', async () => {
+	let promptedWith = '';
+	const plugin = fakePlugin({
+		doc: '- Cow - moo',
+		promptFolder: async (def) => {
+			promptedWith = def;
+			return 'Picked/Place';
+		},
+		settings: { enableNlpKeywords: false, newNoteFolder: 'Concepts', newFolderMode: 'closest' },
+	});
+
+	processFileAndPreview(plugin);
+	await plugin.applyPreview([0]);
+
+	assert.equal(promptedWith, 'a/Concepts', 'prompt defaults to subfolder path');
+	assert.ok(plugin.getFileByPath('Picked/Place/Cow.md'), 'note created at chosen path');
 });

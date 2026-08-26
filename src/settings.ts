@@ -205,6 +205,39 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl).setName('Note creation').setHeading();
+
+		new Setting(containerEl)
+			.setName('New note folder')
+			.setDesc(
+				'Folder name new notes go into. Blank: the current note\'s own folder.',
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder('Concepts')
+					.setValue(this.plugin.settings.newNoteFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.newNoteFolder = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('New folder mode')
+			.setDesc(
+				'Subfolder: create the folder inside the current note directory. Closest shared folder: reuse the nearest existing folder of that name, walking up; if none exists you are prompted for where to create it.',
+			)
+			.addDropdown((drop) =>
+				drop
+					.addOption('subfolder', 'Subfolder')
+					.addOption('closest', 'Closest shared folder')
+					.setValue(this.plugin.settings.newFolderMode)
+					.onChange(async (value) => {
+						this.plugin.settings.newFolderMode = value as 'subfolder' | 'closest';
+						await this.plugin.saveSettings();
+					}),
+			);
+
 		new Setting(containerEl).setName('Existing notes').setHeading();
 
 		new Setting(containerEl)
