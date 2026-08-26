@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-auto-link-creator",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "Automatically creates Obsidian links from list templates, repeated phrases, and NLP keyword detection. Suggests links across the vault with a preview before applying.",
 	"main": "main.js",
 	"type": "module",
