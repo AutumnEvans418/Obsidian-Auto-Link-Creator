@@ -9,7 +9,6 @@ import { variantForms } from "../nlp.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
-import { filterByPreviewMode } from "../ui/suggestion.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
 import type { IPlugin } from "./ipluginInterface.ts";
 
@@ -102,19 +101,18 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		if (source) for (const s of nlpFound) s.sources = [source];
 		found.push(...nlpFound);
 	}
-	const suggestions = filterByPreviewMode(found, plugin.settings.previewKeywords);
-	if (!suggestions.length) {
+	if (!found.length) {
 		plugin.notice('No keyword matches found.');
 		return;
 	}
-	plugin.preview(suggestions, async (indices) => {
+	plugin.preview(found, async (indices) => {
 		let created = 0;
 		let appended = 0;
 		const toLink: ParsedTemplate[] = [];
 		const onWrite = plugin.undoableWriter();
 		const groups = dedupeSuggestions(
 			indices
-				.map((i) => suggestions[i])
+				.map((i) => found[i])
 				.filter((s): s is Suggestion => !!s),
 		);
 		const dest = await targetFolder(plugin, folder, {});
@@ -159,19 +157,18 @@ export function processFileAndPreview(plugin: IPlugin): void {
 /** Scan every markdown file, preview vault-wide suggestions, apply on select. */
 export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 	const collected = await collectVaultSuggestions(plugin, plugin.settings);
-	const suggestions = filterByPreviewMode(collected, plugin.settings.previewKeywords);
-	if (!suggestions.length) {
+	if (!collected.length) {
 		plugin.notice('No keyword matches found in the vault.');
 		return;
 	}
-	plugin.preview(suggestions, async (indices) => {
+	plugin.preview(collected, async (indices) => {
 		const onWrite = plugin.undoableWriter();
 		let created = 0;
 		let appended = 0;
 		const promptCache: { value?: string | null } = {};
 		const groups = dedupeSuggestions(
 			indices
-				.map((i) => suggestions[i])
+				.map((i) => collected[i])
 				.filter((s): s is Suggestion => !!s),
 		);
 		for (const g of groups) {

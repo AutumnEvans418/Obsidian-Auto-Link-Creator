@@ -205,32 +205,6 @@ test('linkTemplateKeywords never touches frontmatter', () => {
 	assert.match(setWith, /\[\[Armor Class\]\]/);
 });
 
-test('preview presents only template findings when configured', () => {
-	const plugin = fakePlugin({
-		doc: '- Cow - moo\nThe cows grazed. The cows slept.',
-		settings: { previewKeywords: 'template' },
-	});
-
-	processFileAndPreview(plugin);
-
-	assert.deepEqual(
-		plugin.previewSuggestions.map((s) => s.name),
-		['Cow'],
-	);
-});
-
-test('preview presents only nlp findings when configured', () => {
-	const plugin = fakePlugin({
-		doc: '- Cow - moo\nThe cows grazed. The cows slept.',
-		settings: { previewKeywords: 'nlp' },
-	});
-
-	processFileAndPreview(plugin);
-
-	assert.deepEqual(plugin.previewSuggestions.map((s) => s.templates ?? []), [[]]);
-	assert.ok(plugin.previewSuggestions.every((s) => s.nlpRoot));
-});
-
 test('vault scan marks nlpRoot only for nlp-contributed entries', async () => {
 	const plugin = fakePlugin({
 		files: {

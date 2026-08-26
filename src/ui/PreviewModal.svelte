@@ -1,6 +1,7 @@
 
 <script lang="ts">
 import type { Suggestion } from './suggestion';
+import { suggestionKinds } from './suggestion';
 
 interface Props {
 	suggestions: Suggestion[];
@@ -16,10 +17,16 @@ const items: Suggestion[] = [...suggestions];
 let checked: boolean[] = $state(items.map(() => false));
 let sortBy: 'usage' | 'name' | 'longest' | 'shortest' = $state('usage');
 let query: string = $state('');
+let filterMode: 'both' | 'template' | 'nlp' = $state('both');
+let onlyContent: boolean = $state(false);
 
 const view = $derived(
 	[...items]
 		.map((s, i) => ({ s, i }))
+		.filter(({ s }) =>
+			filterMode === 'both' || suggestionKinds(s).includes(filterMode),
+		)
+		.filter(({ s }) => !onlyContent || !!s.content)
 		.filter(({ s }) => s.name.toLowerCase().includes(query.trim().toLowerCase()))
 		.sort((a, b) => {
 			if (sortBy === 'usage')
@@ -54,6 +61,18 @@ const excerpt = (content: string): string => {
 				<option value="longest">Longest keyword</option>
 				<option value="shortest">Shortest keyword</option>
 			</select>
+		</label>
+		<label class="alc-sort">
+			Source
+			<select bind:value={filterMode}>
+				<option value="both">Both</option>
+				<option value="template">Template</option>
+				<option value="nlp">NLP</option>
+			</select>
+		</label>
+		<label class="alc-sort">
+			<input type="checkbox" bind:checked={onlyContent} />
+			Has content
 		</label>
 		<button type="button" onclick={() => (checked = checked.map(() => true))}>Select all</button>
 		<button type="button" onclick={() => (checked = checked.map(() => false))}>Select none</button>

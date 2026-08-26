@@ -98,21 +98,6 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Preview keyword findings')
-			.setDesc('Which findings the preview presents: template lines, repeated-phrase keywords, or both.')
-			.addDropdown((drop) =>
-				drop
-					.addOption('both', 'Both')
-					.addOption('template', 'Template')
-					.addOption('nlp', 'NLP')
-					.setValue(this.plugin.settings.previewKeywords)
-					.onChange(async (value) => {
-						this.plugin.settings.previewKeywords = value as 'both' | 'template' | 'nlp';
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
 			.setName('Extra stop words')
 			.setDesc(
 				'Comma-separated words for NLP keyword detection to ignore. E.g. project, team, feature',
