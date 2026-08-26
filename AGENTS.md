@@ -1,5 +1,6 @@
 # Obsidian plugin — Auto Link Creator
 - use rtk.
+- Always include release descriptions for what changed when making a new release.
 
 ## Repo state (read this first)
 

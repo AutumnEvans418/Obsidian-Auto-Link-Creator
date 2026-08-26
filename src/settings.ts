@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, TextAreaComponent } from 'obsidian';
+import { App, PluginSettingTab, Setting, TextAreaComponent, type SettingDefinitionItem } from 'obsidian';
 import type AutoLinkCreator from './main.ts';
 import { isValidTemplate } from './validation.ts';
 import { DEFAULT_SETTINGS } from './settingsSchema.ts';
@@ -8,7 +8,7 @@ export { DEFAULT_SETTINGS };
 export type { AutoLinkSettings };
 
 const CODEBLOCK_HELP =
-	'Skip contents of fenced code blocks (```).'
+	'Skip contents of fenced code blocks (```).';
 
 const TEMPLATE_HELP =
 	'One line pattern per entry. Fields: {{Link Name}}, {{Link Alias}}, {{Link Content}}. First matching template wins.';
@@ -22,265 +22,217 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+		this.containerEl.empty();
+	}
 
-		new Setting(containerEl)
-			.setName('Link templates')
-			.setDesc(TEMPLATE_HELP)
-			.setHeading()
-			.addExtraButton((btn) =>
-				btn
-					.setIcon('plus')
-					.setTooltip('Add template')
-					.onClick(async () => {
-						this.plugin.settings.templates.push('');
-						await this.plugin.saveSettings();
-						this.display();
-					}),
-			);
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const plugin = this.plugin;
+		const defs: SettingDefinitionItem[] = [];
 
-		this.plugin.settings.templates.forEach((tpl, index) => {
-			let field: TextAreaComponent;
-			new Setting(containerEl).setName(`Template ${index + 1}`).addTextArea(
-				(text) => {
-					field = text;
-					text.setValue(tpl).onChange(async (value) => {
-						if (!isValidTemplate(value)) {
-							text.inputEl.addClass('mod-error');
-							return;
-						}
-						text.inputEl.removeClass('mod-error');
-						this.plugin.settings.templates[index] = value;
-						await this.plugin.saveSettings();
-					});
-				},
-			).addExtraButton((btn) =>
-				btn
-					.setIcon('trash-2')
-					.setTooltip('Delete template')
-					.onClick(async () => {
-						this.plugin.settings.templates.splice(index, 1);
-						await this.plugin.saveSettings();
-						this.display();
-					}),
-			);
-			field!.inputEl.rows = 2;
-			field!.inputEl.cols = 50;
+		defs.push({
+			name: 'Link templates',
+			desc: TEMPLATE_HELP,
+			action: () => {
+				plugin.settings.templates.push('');
+				void plugin.saveSettings().then(() => this.update());
+			},
 		});
 
-		new Setting(containerEl).setName('Keyword sources').setHeading();
+		for (let index = 0; index < plugin.settings.templates.length; index++) {
+			const tpl = plugin.settings.templates[index]!;
+			defs.push({
+				name: `Template ${index + 1}`,
+				render: (setting: Setting) => {
+					let field: TextAreaComponent;
+					setting.addTextArea((text) => {
+						field = text;
+						text.setValue(tpl).onChange(async (value) => {
+							if (!isValidTemplate(value)) {
+								text.inputEl.addClass('mod-error');
+								return;
+							}
+							text.inputEl.removeClass('mod-error');
+							plugin.settings.templates[index] = value;
+							await plugin.saveSettings();
+						});
+					}).addExtraButton((btn) =>
+						btn
+							.setIcon('trash-2')
+							.setTooltip('Delete template')
+							.onClick(async () => {
+								plugin.settings.templates.splice(index, 1);
+								await plugin.saveSettings();
+								this.update();
+							}),
+					);
+					field!.inputEl.rows = 2;
+					field!.inputEl.cols = 50;
+				},
+			});
+		}
 
-		new Setting(containerEl)
-			.setName('Template-based keywords')
-			.setDesc('Detect keywords from `{{Link ...}}` template lines.')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.enableTemplateKeywords)
-					.onChange(async (value) => {
-						this.plugin.settings.enableTemplateKeywords = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({ name: 'Keyword sources', heading: 'Keyword sources' });
 
-		new Setting(containerEl)
-			.setName('NLP-based keywords')
-			.setDesc(
-				'Scan note prose for repeated, useful phrases (normalized: plural, singular, lemmatized forms grouped together).',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.enableNlpKeywords)
-					.onChange(async (value) => {
-						this.plugin.settings.enableNlpKeywords = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Template-based keywords',
+			control: {
+				type: 'toggle',
+				key: 'enableTemplateKeywords',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Extra stop words')
-			.setDesc(
-				'Comma-separated words for NLP keyword detection to ignore. E.g. project, team, feature',
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder('project, team, feature')
-					.setValue(this.plugin.settings.extraStopwords)
-					.onChange(async (value) => {
-						this.plugin.settings.extraStopwords = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'NLP-based keywords',
+			desc: 'Scan note prose for repeated, useful phrases (normalized: plural, singular, lemmatized forms grouped together).',
+			control: {
+				type: 'toggle',
+				key: 'enableNlpKeywords',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Ignore code blocks')
-			.setDesc(CODEBLOCK_HELP)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.ignoreCodeblocks)
-					.onChange(async (value) => {
-						this.plugin.settings.ignoreCodeblocks = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Extra stop words',
+			desc: 'Comma-separated words for NLP keyword detection to ignore. E.g. project, team, feature',
+			render: (setting: Setting) => {
+				setting.addText((text) =>
+					text
+						.setPlaceholder('Project, team, feature')
+						.setValue(plugin.settings.extraStopwords)
+						.onChange(async (value) => {
+							plugin.settings.extraStopwords = value;
+							await plugin.saveSettings();
+						}),
+				);
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Ignore dates')
-			.setDesc('Skip date/number-like phrases (e.g. 2026, 2026-08-24) when linking.')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.ignoreDates)
-					.onChange(async (value) => {
-						this.plugin.settings.ignoreDates = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Ignore code blocks',
+			desc: CODEBLOCK_HELP,
+			control: {
+				type: 'toggle',
+				key: 'ignoreCodeblocks',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Link on save')
-			.setDesc(
-				'Automatically convert template keywords to wiki links when a template-based-keyword note is saved. Idempotent: already-linked phrases are skipped.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.onSaveEnabled)
-					.onChange(async (value) => {
-						this.plugin.settings.onSaveEnabled = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Ignore dates',
+			desc: 'Skip date/number-like phrases (e.g. 2026, 2026-08-24) when linking.',
+			control: {
+				type: 'toggle',
+				key: 'ignoreDates',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Open files for undo')
-			.setDesc(
-				'Open notes that get content appended in background tabs (without changing the active note) so the built-in Undo can revert them.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.openForUndo)
-					.onChange(async (value) => {
-						this.plugin.settings.openForUndo = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Link on save',
+			desc: 'Automatically convert template keywords to wiki links when a template-based-keyword note is saved. Idempotent: already-linked phrases are skipped.',
+			control: {
+				type: 'toggle',
+				key: 'onSaveEnabled',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Capitalize names')
-			.setDesc('Capitalize each first letter of note names and link text.')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.capitalize)
-					.onChange(async (value) => {
-						this.plugin.settings.capitalize = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Open files for undo',
+			desc: 'Open notes that get content appended in background tabs (without changing the active note) so the built-in Undo can revert them.',
+			control: {
+				type: 'toggle',
+				key: 'openForUndo',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Debug details in preview')
-			.setDesc(
-				'Show provenance for each suggestion: source file/line, matched template, and nlp root.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.debug)
-					.onChange(async (value) => {
-						this.plugin.settings.debug = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Capitalize names',
+			desc: 'Capitalize each first letter of note names and link text.',
+			control: {
+				type: 'toggle',
+				key: 'capitalize',
+			},
+		});
 
-		new Setting(containerEl).setName('Note creation').setHeading();
+		defs.push({
+			name: 'Debug details in preview',
+			desc: 'Show provenance for each suggestion: source file/line, matched template, and nlp root.',
+			control: {
+				type: 'toggle',
+				key: 'debug',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('New note folder')
-			.setDesc(
-				'Folder name new notes go into. Blank: the current note\'s own folder.',
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder('Concepts')
-					.setValue(this.plugin.settings.newNoteFolder)
-					.onChange(async (value) => {
-						this.plugin.settings.newNoteFolder = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({ name: 'Note creation', heading: 'Note creation' });
 
-		new Setting(containerEl)
-			.setName('New folder mode')
-			.setDesc(
-				'Subfolder: create the folder inside the current note directory. Closest shared folder: reuse the nearest existing folder of that name, walking up; if none exists you are prompted for where to create it.',
-			)
-			.addDropdown((drop) =>
-				drop
-					.addOption('subfolder', 'Subfolder')
-					.addOption('closest', 'Closest shared folder')
-					.setValue(this.plugin.settings.newFolderMode)
-					.onChange(async (value) => {
-						this.plugin.settings.newFolderMode = value as 'subfolder' | 'closest';
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'New note folder',
+			desc: "Folder name new notes go into. Blank: the current note's own folder.",
+			render: (setting: Setting) => {
+				setting.addText((text) =>
+					text
+						.setPlaceholder('Concepts')
+						.setValue(plugin.settings.newNoteFolder)
+						.onChange(async (value) => {
+							plugin.settings.newNoteFolder = value;
+							await plugin.saveSettings();
+						}),
+				);
+			},
+		});
 
-		new Setting(containerEl).setName('Existing notes').setHeading();
+		defs.push({
+			name: 'New folder mode',
+			desc: 'Subfolder: create the folder inside the current note directory. Closest shared folder: reuse the nearest existing folder of that name, walking up; if none exists you are prompted for where to create it.',
+			control: {
+				type: 'dropdown',
+				key: 'newFolderMode',
+				options: {
+					subfolder: 'Subfolder',
+					closest: 'Closest shared folder',
+				},
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Link existing notes')
-			.setDesc(
-				'Link phrases that match an existing note name or alias (from the metadata cache) to that note.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.enableExistingLinks)
-					.onChange(async (value) => {
-						this.plugin.settings.enableExistingLinks = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({ name: 'Existing notes', heading: 'Existing notes' });
 
-		new Setting(containerEl)
-			.setName('Match mode')
-			.setDesc(
-				'Exact: only the note name/alias text matches. NLP root: plural/singular/lemmatized variants match too (e.g. "cows" links to "Cow").',
-			)
-			.addDropdown((drop) =>
-				drop
-					.addOption('exact', 'Exact')
-					.addOption('root', 'NLP root')
-					.setValue(this.plugin.settings.existingMatchMode)
-					.onChange(async (value) => {
-						this.plugin.settings.existingMatchMode = value as 'exact' | 'root';
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Link existing notes',
+			desc: 'Link phrases that match an existing note name or alias (from the metadata cache) to that note.',
+			control: {
+				type: 'toggle',
+				key: 'enableExistingLinks',
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Link existing notes on save')
-			.setDesc(
-				'Automatically link existing-note matches when a note is saved. Idempotent: already-linked phrases are skipped.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.existingOnSave)
-					.onChange(async (value) => {
-						this.plugin.settings.existingOnSave = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Match mode',
+			desc: 'Exact: only the note name/alias text matches. NLP root: plural/singular/lemmatized variants match too (e.g. "cows" links to "Cow").',
+			control: {
+				type: 'dropdown',
+				key: 'existingMatchMode',
+				options: {
+					exact: 'Exact',
+					root: 'NLP root',
+				},
+			},
+		});
 
-		new Setting(containerEl)
-			.setName('Link unresolved wikilinks')
-			.setDesc(
-				'Also index link targets from wikilinks whose notes do not exist yet (e.g. [[FileB]] in another file) so plain-text mentions of those names get linked too.',
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.linkUnresolved)
-					.onChange(async (value) => {
-						this.plugin.settings.linkUnresolved = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+		defs.push({
+			name: 'Link existing notes on save',
+			desc: 'Automatically link existing-note matches when a note is saved. Idempotent: already-linked phrases are skipped.',
+			control: {
+				type: 'toggle',
+				key: 'existingOnSave',
+			},
+		});
+
+		defs.push({
+			name: 'Link unresolved wikilinks',
+			desc: 'Also index link targets from wikilinks whose notes do not exist yet (e.g. [[FileB]] in another file) so plain-text mentions of those names get linked too.',
+			control: {
+				type: 'toggle',
+				key: 'linkUnresolved',
+			},
+		});
+
+		return defs;
 	}
 }

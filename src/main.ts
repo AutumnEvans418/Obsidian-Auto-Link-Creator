@@ -139,7 +139,7 @@ export default class AutoLinkCreator extends Plugin {
 					editor.setValue(content);
 				}
 				// Defer restore so Obsidian's post-save layout settles first.
-				requestAnimationFrame(() => {
+				window.requestAnimationFrame(() => {
 					if (scroll && editor.scrollTo) editor.scrollTo(scroll.top, scroll.left);
 					if (cursor && editor.setCursor) editor.setCursor(cursor);
 				});

@@ -2,7 +2,7 @@
 	"id": "auto-link-creator",
 	"name": "Auto Link Creator",
 	"version": "1.0.2",
-	"minAppVersion": "1.4.0",
+	"minAppVersion": "1.13.0",
 	"description": "Create notes and links from list templates, repeated phrases, and NLP keyword detection across your vault with a preview before applying.",
 	"author": "Autumn Fox",
 	"authorUrl": "https://github.com/AutumnEvans418",
