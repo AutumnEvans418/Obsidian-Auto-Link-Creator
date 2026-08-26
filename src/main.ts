@@ -72,6 +72,7 @@ export default class AutoLinkCreator extends Plugin {
 	settings!: AutoLinkSettings;
 	private originalSaveCallback: ((checking: boolean) => boolean | void) | undefined;
 	private wrappedSaveCallback: ((checking: boolean) => boolean | void) | undefined;
+	private linkTimers: Record<string, number> = {};
 
 	/**
 	 * Obsidian-backed implementation of the service facade. Everything
@@ -246,6 +247,29 @@ export default class AutoLinkCreator extends Plugin {
 			saveDef.checkCallback = this.wrappedSaveCallback;
 		}
 
+		// Debounced link-existing-notes on edit: waits for a typing pause
+		// before running, so linking happens while the user is still working
+		// rather than only on explicit save.
+		this.registerEvent(
+			this.app.workspace.on('editor-change', (_editor, info) => {
+				const file = info.file;
+				if (
+					!this.settings.linkOnEditEnabled ||
+					!this.settings.enableExistingLinks ||
+					!(file instanceof TFile)
+				)
+					return;
+				const filePath = file.path;
+				window.clearTimeout(this.linkTimers[filePath]);
+				this.linkTimers[filePath] = window.setTimeout(() => {
+					delete this.linkTimers[filePath];
+					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+					if (view && view.file?.path === filePath)
+						linkExistingNotes(this.facade(view.editor, filePath));
+				}, this.settings.linkOnEditTimeout * 1000);
+			}),
+		);
+
 		// Convert matched template blocks in the active file into wiki links.
 		this.addCommand({
 			id: 'convert-keywords-to-links',
@@ -304,6 +328,8 @@ export default class AutoLinkCreator extends Plugin {
 	}
 
 	onunload() {
+		for (const id of Object.values(this.linkTimers)) window.clearTimeout(id);
+		this.linkTimers = {};
 		if (this.originalSaveCallback) {
 			const saveDef = this.app.commands?.commands?.['editor:save-file'];
 			if (saveDef && saveDef.checkCallback === this.wrappedSaveCallback) {

@@ -225,6 +225,28 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 		});
 
 		defs.push({
+			name: 'Link existing notes while typing',
+			desc: 'Automatically link existing-note matches after a typing pause. Idempotent: already-linked phrases are skipped.',
+			control: {
+				type: 'toggle',
+				key: 'linkOnEditEnabled',
+			},
+		});
+
+		defs.push({
+			name: 'Typing pause delay (seconds)',
+			desc: 'How long to wait after the last keystroke before linking.',
+			control: {
+				type: 'slider',
+				key: 'linkOnEditTimeout',
+				min: 1,
+				max: 30,
+				step: 1,
+			},
+			visible: () => plugin.settings.linkOnEditEnabled,
+		});
+
+		defs.push({
 			name: 'Link unresolved wikilinks',
 			desc: 'Also index link targets from wikilinks whose notes do not exist yet (e.g. [[FileB]] in another file) so plain-text mentions of those names get linked too.',
 			control: {

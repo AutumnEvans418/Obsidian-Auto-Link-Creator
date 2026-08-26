@@ -26,6 +26,10 @@ export interface AutoLinkSettings {
 	existingMatchMode: 'exact' | 'root';
 	/** Auto-link existing-note matches when the active note is saved. */
 	existingOnSave: boolean;
+	/** Auto-link existing-note matches after a typing pause. */
+	linkOnEditEnabled: boolean;
+	/** Seconds to wait after last keystroke before linking on edit. */
+	linkOnEditTimeout: number;
 	/** Also index unresolved wikilinks (links to files that don't exist yet). */
 	linkUnresolved: boolean;
 	/** Folder name new notes go into ('' = the source note's own folder). */
@@ -52,6 +56,8 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	enableExistingLinks: true,
 	existingMatchMode: 'exact',
 	existingOnSave: false,
+	linkOnEditEnabled: true,
+	linkOnEditTimeout: 5,
 	linkUnresolved: true,
 	newNoteFolder: '',
 	newFolderMode: 'subfolder',
