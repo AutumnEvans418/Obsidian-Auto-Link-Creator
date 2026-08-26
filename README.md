@@ -54,6 +54,10 @@ Instead of only creating new notes, the plugin can detect phrases that match **e
 
 Destructive operations go through a preview modal first: see every suggested link, which file it came from and why it was suggested, select/deselect items, then apply. Undo is supported (updated notes can be opened in background leaves for native Ctrl-Z rollback).
 
+![Preview vault scan](docs/preview-vault-scan.gif)
+
+![Preview single file](docs/preview-single-file.gif)
+
 ## Commands
 
 | Command | Description |
@@ -78,10 +82,16 @@ New notes are created in the same folder as the source note (or the highest comm
 
 ## Installation
 
-Not yet in the community plugin store. Install manually:
+### From community plugins
+
+1. Open **Settings** → **Community plugins** → **Browse**.
+2. Search for **Auto Link Creator**.
+3. Click **Install**, then **Enable**.
+
+### Manual install
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator/releases).
-2. Copy them into `<Vault>/.obsidian/plugins/Obsidian-Auto-Link-Creator/`.
+2. Copy them into `<Vault>/.obsidian/plugins/auto-link-creator/`.
 3. Reload Obsidian and enable the plugin in Community plugins.
 
 Or via BRAT: add `AutumnEvans418/Obsidian-Auto-Link-Creator` as a custom repository.

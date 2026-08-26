@@ -74,8 +74,6 @@ const excerpt = (content: string): string => {
 			<input type="checkbox" bind:checked={onlyContent} />
 			Has content
 		</label>
-		<button type="button" onclick={() => (checked = checked.map(() => true))}>Select all</button>
-		<button type="button" onclick={() => (checked = checked.map(() => false))}>Select none</button>
 		<input
 			class="alc-search"
 			type="search"
@@ -84,6 +82,10 @@ const excerpt = (content: string): string => {
 			bind:value={query}
 		/>
 		<span class="alc-preview-selected">{selectedCount} / {items.length}</span>
+	</div>
+	<div class="alc-preview-toolbar">
+		<button type="button" onclick={() => (checked = checked.map(() => true))}>Select all</button>
+		<button type="button" onclick={() => (checked = checked.map(() => false))}>Select none</button>
 	</div>
 	{#if view.length === 0}
 		<p class="alc-preview-empty">No suggestions match "{query}".</p>
@@ -165,6 +167,7 @@ const excerpt = (content: string): string => {
 	}
 	.alc-preview-toolbar {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5em;
 		align-items: center;
 		margin-bottom: 0.5em;

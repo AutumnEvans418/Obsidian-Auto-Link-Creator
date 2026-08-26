@@ -9,7 +9,7 @@
   (linking formats, phrase-count NLP, variants/pluralization, aliases, preview).
   Manifest description and `README.md` describe *intended* features; only `PLAN.md`
   reflects reality. Build features from `PLAN.md`, not the README.
-- Plugin id `obsidian-automatic-link-creator` (manifest) vs folder `Obsidian-Auto-Link-Creator`.
+- Plugin id `auto-link-creator` (manifest) vs folder `Obsidian-Auto-Link-Creator`.
   Match `id` to the folder for local install; never change `id` after release.
 
 ## What to build (from PLAN.md)
