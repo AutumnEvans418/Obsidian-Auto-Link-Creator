@@ -99,6 +99,64 @@ test('non-allowlisted block stays skipped alongside an allowlisted one', () => {
 	assert.match(lines[4] ?? '', /\[\[Cow\]\] there/);
 });
 
+test('mermaid sequence diagram stays byte-identical by default', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const doc = [
+		'```mermaid',
+		'sequenceDiagram',
+		'    Alice->>+Cow: grazes grass',
+		'    Bob-->>Alice: idle',
+		'```',
+	].join('\n');
+	const res = applyExistingLinks(doc, idx, { capitalize: true });
+	assert.equal(res.updated, doc);
+	assert.equal(res.count, 0);
+});
+
+test('allowlisted mermaid links keep arrows, colons, and indent intact', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const doc = [
+		'```mermaid',
+		'    Alice->>+Cow: grazes grass',
+		'    Bob-->>Alice: idle',
+		'```',
+	].join('\n');
+	const res = applyExistingLinks(doc, idx, { capitalize: true, allowedCodeblocks: ['mermaid'] });
+	assert.equal(res.count, 1);
+	assert.match(res.updated, / {4}Alice->>\+\[\[Cow\]\]: grazes grass/);
+	assert.match(res.updated, /```mermaid/);
+	assert.match(res.updated, /```$/);
+});
+
+test('links inside headings and bold/italic/strikethrough', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const doc = [
+		'# Cow report',
+		'## Cow status',
+		'- *Cow thinks*',
+		'- **Cow moos**',
+		'- ~~Cow dreamt~~',
+		'- ***Cow ate***',
+	].join('\n');
+	const res = applyExistingLinks(doc, idx, { capitalize: true });
+	assert.equal(res.count, 6);
+	assert.deepEqual(res.updated.split('\n'), [
+		'# [[Cow]] report',
+		'## [[Cow]] status',
+		'- *[[Cow]] thinks*',
+		'- **[[Cow]] moos**',
+		'- ~~[[Cow]] dreamt~~',
+		'- ***[[Cow]] ate***',
+	]);
+});
+
+test('links inside an inline footnote preserve the ^[] wrapper', () => {
+		const idx = buildNoteIndex(entries, 'exact');
+		const res = applyExistingLinks('See ^[a cow here] note', idx, { capitalize: false });
+		assert.equal(res.count, 1);
+		assert.equal(res.updated, 'See ^[a [[Cow]] here] note');
+	});
+
 test('excludeBasename avoids self-links', () => {
 	const idx = buildNoteIndex(entries, 'exact');
 	const res = applyExistingLinks('Cow says moo', idx, {

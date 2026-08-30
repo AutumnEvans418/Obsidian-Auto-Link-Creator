@@ -1,5 +1,6 @@
 import type { ParsedTemplate } from './template.ts';
 import { titleCase } from './nlp.ts';
+import { isTableRow } from './linkDetector.ts';
 
 type LinkFields = Pick<ParsedTemplate, 'name' | 'alias'>;
 
@@ -60,7 +61,11 @@ export function applyLinks(doc: string, hits: ParsedTemplate[], capitalize: bool
 			target === hit.name
 				? wikiLink({ name: hit.name }, capitalize)
 				: wikiLink({ name: target, alias: hit.name }, capitalize);
-		lines[hit.lineIndex] = line.slice(0, prefix) + link + line.slice(prefix + hit.name.length);
+		// A `Name|Alias` link inside a table cell must escape its pipe so the
+		// row keeps its cell structure.
+		const linked = isTableRow(line) ? link.replace(/\|/g, '\\|') : link;
+		const nameStart = hit.nameStart ?? prefix;
+		lines[hit.lineIndex] = line.slice(0, nameStart) + linked + line.slice(nameStart + hit.name.length);
 	}
 	return lines.join('\n');
 }

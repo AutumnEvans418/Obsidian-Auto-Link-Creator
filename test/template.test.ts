@@ -139,6 +139,71 @@ test('matches inside code block when ignoreCodeblocks=false', () => {
 	assert.equal(all[0]?.name, 'Fake');
 });
 
+test('table template links first and second columns as name and content', () => {
+	const tpl = '| {{Link Name}} | {{Link Content}} |';
+	const all = findAllByTemplates('| Risk Appetite | Level of risk accepted |', [tpl]);
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Risk Appetite');
+	assert.equal(all[0]?.content, 'Level of risk accepted');
+});
+
+test('table separator row is rejected', () => {
+	const tpl = '| {{Link Name}} | {{Link Content}} |';
+	assert.equal(findAllByTemplates('| --- | --- |', [tpl]).length, 0);
+});
+
+test('table template with alias column reads all three cells', () => {
+	const tpl = '| {{Link Name}} | {{Link Alias}} | {{Link Content}} |';
+	const all = findAllByTemplates('| Access Control Systems | ACS | Controls who enters |', [tpl]);
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Access Control Systems');
+	assert.equal(all[0]?.alias, 'ACS');
+	assert.equal(all[0]?.content, 'Controls who enters');
+});
+
+test('callout template: title as name, body lines as content', () => {
+	const tpl = '> [!note] {{Link Name}}';
+	const all = findAllTemplate(
+		['> [!note] Risk Appetite', '> level of risk accepted', '> by the board', 'plain prose'].join('\n'),
+		tpl,
+	);
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Risk Appetite');
+	assert.equal(all[0]?.content, 'level of risk accepted\nby the board');
+});
+
+test('callout template with inline content captures it', () => {
+	const tpl = '> [!note] {{Link Name}} - {{Link Content}}';
+	const r = matchTemplate('> [!note] Risk Appetite - level of risk accepted', tpl);
+	assert.equal(r?.name, 'Risk Appetite');
+	assert.equal(r?.content, 'level of risk accepted');
+});
+
+test('header template links heading text and content', () => {
+	const tpl = '# {{Link Name}} - {{Link Content}}';
+	const r = matchTemplate('# Risk Appetite - level of risk accepted', tpl);
+	assert.equal(r?.name, 'Risk Appetite');
+	assert.equal(r?.content, 'level of risk accepted');
+	assert.equal(r?.nameStart, 2);
+});
+
+test('numbered template matches any list index', () => {
+	const tpl = '1. {{Link Name}}';
+	assert.equal(matchTemplate('2. Risk Appetite', tpl)?.name, 'Risk Appetite');
+});
+
+test('footnote template matches any footnote number', () => {
+	const tpl = '[^1]: {{Link Name}}';
+	const r = matchTemplate('[^9]: Risk Appetite', tpl);
+	assert.equal(r?.name, 'Risk Appetite');
+	assert.equal(r?.nameStart, 6);
+});
+
+test('table rows are not linked into bullets', () => {
+	const all = findAllByTemplates('| Risk Appetite | moo |', [INLINE]);
+	assert.equal(all.length, 0);
+});
+
 test('ignores a language-tagged code block by default', () => {
 	const doc = ['```mermaid', '- Fake (no) - not a real hit', '```'].join('\n');
 	assert.equal(findAllTemplate(doc, INLINE).length, 0);

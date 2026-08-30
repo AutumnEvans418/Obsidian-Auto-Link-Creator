@@ -130,3 +130,31 @@ test('running the pipeline twice is a no-op the second time', () => {
 	assert.equal(pass2.length, 0);
 	assert.equal(applyLinks(linked, pass2, true), linked, 'second apply is a no-op');
 });
+
+test('applyLinks uses nameStart to splice outside a table-leading pipe', () => {
+	const doc = '| Risk Appetite | Level accepted |';
+	const hits = [{ name: 'Risk Appetite', nameStart: 2, lineIndex: 0 }];
+	assert.equal(applyLinks(doc, hits, true), '| [[Risk Appetite]] | Level accepted |');
+});
+
+test('applyLinks escapes the alias pipe inside a table cell', () => {
+	const doc = '| Access Control Systems | ACS |';
+	const hits = [
+		{ name: 'Access Control Systems', target: 'Access Control', alias: 'Access Control Systems', nameStart: 2, lineIndex: 0 },
+	];
+	assert.equal(
+		applyLinks(doc, hits, true),
+		'| [[Access Control\\|Access Control Systems]] | ACS |',
+	);
+});
+
+test('table template flows through the full pipeline', () => {
+	const tpl = '| {{Link Name}} | {{Link Content}} |';
+	const doc = ['| Risk Appetite | Level accepted |', '| Armor Class (AC) | Damage threshold |'].join('\n');
+	const hits = findAllByTemplates(doc, [tpl]);
+	const out = applyLinks(doc, hits, true);
+	assert.equal(
+		out,
+		['| [[Risk Appetite]] | Level accepted |', '| [[Armor Class (AC)]] | Damage threshold |'].join('\n'),
+	);
+});

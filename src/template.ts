@@ -8,6 +8,8 @@ export interface ParsedTemplate {
 	alias?: string;
 	content?: string;
 	lineIndex: number;
+	/** Column where `name` begins in its line (for splice-based linking). */
+	nameStart?: number;
 	/** The template pattern that matched this line (set by the finders). */
 	template?: string;
 	/** Resolved note name when `name` is a foldable variant; set by applyers. */
@@ -50,6 +52,25 @@ type Field = 'name' | 'alias' | 'content';
 
 const FIELD_KEY = /\{\{\s*link\s+(name|alias|content)\s*\}\}/gi;
 
+/** Escapes a string for literal use inside a RegExp source. */
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Line shape implied by the template's literal prefix before `{{Link Name}}`:
+ * `- `/`* ` bullets (classic), `|` table cells, `> ` callouts/quotes, and
+ * anything else (headers, footnotes, numbered lists) as a literal prefix.
+ */
+export type Shape = 'bullet' | 'table' | 'quote' | 'literal';
+
+function shapeOf(tpl: string): Shape {
+	const m = /^([\s\S]*?)\{\{\s*link\s+name\s*\}\}/i.exec(tpl);
+	const first = (m?.[1] ?? '').trimStart()[0];
+	if (first === '|') return 'table';
+	if (first === '>') return 'quote';
+	if (first === '-' || first === '*') return 'bullet';
+	return 'literal';
+}
+
 /** Field order as they appear in a template string. */
 function fieldsOf(tpl: string): Field[] {
 	const out: Field[] = [];
@@ -78,6 +99,34 @@ function headerRegexp(fields: Field[]): RegExp {
 	return new RegExp(src + '$', 'i');
 }
 
+/**
+ * Build a regex for non-bullet shapes by walking the template's literal text
+ * and field placeholders. Literals are escaped and whitespace-flexed; digits
+ * in the head become `\d+` so `1. ` and `[^1]:` match any index/number. Table
+ * cells capture up to the next pipe; name is always group 1.
+ */
+function templateRegexp(tpl: string, fields: Field[], shape: Shape): RegExp {
+	const pos: Record<Field, number> = { name: 0, alias: 0, content: 0 };
+	let g = 1;
+	for (const f of fields) pos[f] = g++;
+	const cell = shape === 'table' ? '[^|]*?' : '.+?';
+	let src = '^\\s*';
+	let last = 0;
+	let inHead = true;
+	tpl.replace(FIELD_KEY, (_m, key: string, offset: number) => {
+		let lit = escapeRe(tpl.slice(last, offset)).replace(/[ \t]+/g, '\\s+');
+		if (inHead) lit = lit.replace(/\d+/g, '\\d+');
+		src += lit;
+		const f = key.toLowerCase() as Field;
+		src += f === 'name' ? '(.+?)' : `(${cell})`;
+		if (f === 'name') inHead = false;
+		last = offset + _m.length;
+		return '';
+	});
+	const tail = escapeRe(tpl.slice(last)).replace(/[ \t]+/g, '\\s+');
+	return new RegExp(src + tail + '\\s*$', 'i');
+}
+
 /** True when the template's `{{Link Content}}` sits on its own child line. */
 function contentIsChild(tpl: string): boolean {
 	const pos = tpl.lastIndexOf('{{Link Content}}');
@@ -86,6 +135,7 @@ function contentIsChild(tpl: string): boolean {
 
 export interface CompiledTemplate {
 	fields: Field[];
+	shape: Shape;
 	header: RegExp;
 	hasContent: boolean;
 	contentIsChild: boolean;
@@ -94,9 +144,11 @@ export interface CompiledTemplate {
 export function compileTemplate(tpl: string): CompiledTemplate | null {
 	const fields = fieldsOf(tpl);
 	if (!fields.includes('name')) return null;
+	const shape = shapeOf(tpl);
 	return {
 		fields,
-		header: headerRegexp(fields),
+		shape,
+		header: shape === 'bullet' ? headerRegexp(fields) : templateRegexp(tpl, fields, shape),
 		hasContent: fields.includes('content'),
 		contentIsChild: contentIsChild(tpl),
 	};
@@ -251,6 +303,22 @@ function gatherChildren(lines: string[], i: number): string[] {
 	return children;
 }
 
+/** Contiguous `> ` lines below a matched callout header become its body. */
+function gatherQuoteChildren(lines: string[], i: number): string[] {
+	const children: string[] = [];
+	for (let j = i + 1; j < lines.length; j++) {
+		const child = lines[j];
+		if (child === undefined || !/^\s*>\s?/.test(child)) break;
+		const v = child.replace(/^\s*>\s?/, '');
+		if (v.trim()) children.push(v.trim());
+	}
+	return children;
+}
+
+function gatherFor(shape: Shape): (lines: string[], i: number) => string[] {
+	return shape === 'quote' ? gatherQuoteChildren : gatherChildren;
+}
+
 function parseAt(
 	c: CompiledTemplate,
 	lines: string[],
@@ -264,14 +332,14 @@ function parseAt(
 	const nameCaptured = m[1];
 	if (!nameCaptured?.trim()) return null;
 	const name = nameCaptured.trim();
+	const nameStart = line.indexOf(name);
 	// Skip a phrase whose name region overlaps an existing `[[...]]` span so a
 	// second run on already-linked output is a no-op (idempotency).
 	if (skipLinked) {
-		const prefix = line.match(/^\s*[-*]\s*/)?.[0]?.length ?? 0;
-		if (overlapsExistingLink(line, prefix, prefix + nameCaptured.length)) return null;
+		if (overlapsExistingLink(line, nameStart, nameStart + name.length)) return null;
 	}
-	const out: ParsedTemplate = { name, lineIndex: i };
-	const aliasCaptured = m[2];
+	const out: ParsedTemplate = { name, nameStart, lineIndex: i };
+	const aliasCaptured = c.fields.includes('alias') ? m[2] : undefined;
 	if (aliasCaptured) out.alias = aliasCaptured.trim();
 	let childCount = 0;
 	if (c.hasContent) {
@@ -281,13 +349,21 @@ function parseAt(
 		// Children win over inline when children exist (for a child template),
 		// and are used as a fallback when a line has no inline content.
 		if (!content || c.contentIsChild) {
-			const children = gatherChildren(lines, i);
+			const children = gatherFor(c.shape)(lines, i);
 			if (children.length) {
 				content = children.join('\n');
 				childCount = children.length;
 			}
 		}
 		if (content) out.content = content;
+	} else if (c.shape === 'quote') {
+		// A bare callout template (`> [!note] {{Link Name}}`) takes its body
+		// lines as content.
+		const children = gatherQuoteChildren(lines, i);
+		if (children.length) {
+			out.content = children.join('\n');
+			childCount = children.length;
+		}
 	}
 	return { hit: out, childCount };
 }

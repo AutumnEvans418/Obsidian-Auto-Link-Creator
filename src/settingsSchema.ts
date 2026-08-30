@@ -45,6 +45,8 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 		'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
 		'- {{Link Name}} ({{Link Alias}})',
 		'- {{Link Name}} - {{Link Content}}',
+		'| {{Link Name}} | {{Link Content}} |',
+		'> [!note] {{Link Name}}',
 	],
 	ignoreCodeblocks: true,
 	allowedCodeblocks: [],

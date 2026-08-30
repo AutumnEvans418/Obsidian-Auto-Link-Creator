@@ -6,26 +6,26 @@ kanban-plugin: board
 
 ## Todo
 
-- [ ] Ignore html blocks #feature
-- [ ] Disable the notice notifications on every linking. #feature
 - [ ] Update auto link preview to include linking existing notes, not just making new ones. #feature
-- [ ] Add a front-matter that when exists, disables auto link for that page. #feature
 - [ ] Currently as you type, it links existing notes, but when showing Auto link preview, it won't make certain suggestions because some of the words in the template were already linked, which means it has to be fixed by hand. Might be nice to have a way to override it. Option to Match longer definitions even when a link already is in the name. [[Typing Fail Example]] #feature
-- [ ] Numbered template support [[Before-TestNote#Numbered]] #feature
 
 
 ## Active
 
-- [ ] Diagram (mermaid) support. Test that mermaid still valid after linking. #feature
-- [ ] Callout template. Title (name) + description #feature
-- [ ] Header, bolding, etc. Simple testing. #feature
-- [ ] Table template support ability to link first, second columns as name and definition #feature
-- [ ] Footnote template support. Just need explicit test. #feature
+- [ ] Ignore html blocks #feature
+- [ ] Disable the notice notifications on every linking. #feature
+- [ ] Add a front-matter property that when exists, disables auto link for that page. #feature
+- [ ] Numbered template support [[Before-TestNote#Numbered]] #feature
 
 
 ## Done
 
 **Complete**
+- [x] Diagram (mermaid) support. Fix: default scan leaves mermaid sequence diagrams byte-identical (arrows, colons, indent intact) — verified by test. With 'mermaid' on the **Code blocks to link** allowlist, phrases inside the diagram link while arrows/colons/indent are preserved (src/existingLinks.ts). #feature
+- [x] Callout template. Fix: **templates now follow the line's leading shape** (src/template.ts). `> [!note] {{Link Name}}` matches a callout: title is the name, contiguous `> ` body lines become the description (content); inline-content form `> [!note] {{Name}} - {{Content}}` also works. #feature
+- [x] Header, bolding, etc. Fix: existing-note linking wraps names inside headings, bold, italic, strikethrough, and `***` without disturbing the markers (existing-links tests). Literal-prefix templates (`# {{Link Name}} - {{Link Content}}`, `1. {{Link Name}}`, `[^1]: {{Link Name}}`) now match headers/numbered/footnote lines via the generic shape regex. #feature
+- [x] Table template support. Fix: `| {{Link Name}} | {{Link Content}} |` reads first/second columns as name/definition; `| {{Name}} | {{Alias}} | {{Content}} |` reads all three. Separator rows (`| --- |`) rejected. Links inserted into cells escape the alias pipe (`[[Name\|Alias]]`) so the table stays intact (src/link.ts via `nameStart` splicing). #feature
+- [x] Footnote template support. Fix: `[^1]: {{Link Name}}` matches any footnote reference number (digit-normalized head), and the existing-links pass wraps names inside `^[...]` footnotes. Explicit tests added. #feature
 - [x] Setting to include/exclude unspecified code blocks, and to list allowed codeblocks for text to be linked (mermaid for example). Fix: **Code blocks to link** setting (comma-separated languages, e.g. mermaid) whose fenced-block contents are still linked when code blocks are ignored. Shared `makeCodeblockFilter` (src/validation.ts) drives both the template scanner (src/template.ts) and existing-note linking (src/existingLinks.ts), so ignore/allowlist now behave identically across both. #feature
 - [x] Creating links inside a table does not work properly. [[Table Fail Example]] #bug
 - [x] The "open files for undo" does not work. No files gets opened. #bug
