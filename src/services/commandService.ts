@@ -27,6 +27,7 @@ function scanOpts(plugin: IPlugin) {
 	return {
 		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 		ignoreDates: plugin.settings.ignoreDates,
+		allowedCodeblocks: plugin.settings.allowedCodeblocks,
 	};
 }
 
@@ -143,6 +144,8 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		const res = applyExistingLinks(current, groupIndex(groups), {
 			capitalize: plugin.settings.capitalize,
 			excludeBasename,
+			ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
+			allowedCodeblocks: plugin.settings.allowedCodeblocks,
 		});
 		if (res.updated !== current) plugin.set(res.updated);
 		const linked = toLink.length + res.count;
@@ -243,6 +246,8 @@ export function linkExistingNotes(plugin: IPlugin): void {
 	const res = applyExistingLinks(plugin.value(), index, {
 		capitalize: plugin.settings.capitalize,
 		excludeBasename,
+		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
+		allowedCodeblocks: plugin.settings.allowedCodeblocks,
 	});
 	if (!res.count) {
 		plugin.notice('No existing-note matches found.');

@@ -4,6 +4,8 @@ export interface AutoLinkSettings {
 	templates: string[];
 	/** Skip template/child-line matching inside fenced code blocks (```). */
 	ignoreCodeblocks: boolean;
+	/** Fenced-block languages (e.g. mermaid) still linked inside when code blocks are ignored. */
+	allowedCodeblocks: string[];
 	/** Skip date/number-like phrases (e.g. `2026`, `2026-08-24`) when linking. */
 	ignoreDates: boolean;
 	/** Capitalize each first letter of note names and link text. */
@@ -45,6 +47,7 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 		'- {{Link Name}} - {{Link Content}}',
 	],
 	ignoreCodeblocks: true,
+	allowedCodeblocks: [],
 	ignoreDates: true,
 	capitalize: true,
 	enableTemplateKeywords: true,

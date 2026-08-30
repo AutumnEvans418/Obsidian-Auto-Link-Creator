@@ -75,6 +75,30 @@ test('skips fenced code blocks and frontmatter', () => {
 	assert.equal(res.count, 1);
 });
 
+test('skips a language-tagged code block by default', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const res = applyExistingLinks('```mermaid\ncow\n```', idx, { capitalize: false });
+	assert.equal(res.count, 0);
+});
+
+test('allowlisted code block language still gets existing-note links', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const doc = ['```mermaid', 'Alice->>cow: grass', '```'].join('\n');
+	const res = applyExistingLinks(doc, idx, { capitalize: true, allowedCodeblocks: ['mermaid'] });
+	assert.equal(res.count, 1);
+	assert.match(res.updated, /Alice->>\[\[Cow\]\]: grass/);
+});
+
+test('non-allowlisted block stays skipped alongside an allowlisted one', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const doc = ['```text', 'cow here', '```', '```mermaid', 'cow there', '```'].join('\n');
+	const res = applyExistingLinks(doc, idx, { capitalize: false, allowedCodeblocks: ['mermaid'] });
+	assert.equal(res.count, 1);
+	const lines = res.updated.split('\n');
+	assert.equal(lines[1], 'cow here', 'text block untouched');
+	assert.match(lines[4] ?? '', /\[\[Cow\]\] there/);
+});
+
 test('excludeBasename avoids self-links', () => {
 	const idx = buildNoteIndex(entries, 'exact');
 	const res = applyExistingLinks('Cow says moo', idx, {

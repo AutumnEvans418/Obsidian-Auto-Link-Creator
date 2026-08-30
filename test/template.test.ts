@@ -139,6 +139,25 @@ test('matches inside code block when ignoreCodeblocks=false', () => {
 	assert.equal(all[0]?.name, 'Fake');
 });
 
+test('ignores a language-tagged code block by default', () => {
+	const doc = ['```mermaid', '- Fake (no) - not a real hit', '```'].join('\n');
+	assert.equal(findAllTemplate(doc, INLINE).length, 0);
+});
+
+test('allowlisted code block language is linked; others stay skipped', () => {
+	const doc = [
+		'```text',
+		'- Hidden (no) - skipped',
+		'```',
+		'```allowed',
+		'- Visible (yes) - hit',
+		'```',
+	].join('\n');
+	const all = findAllTemplate(doc, INLINE, { allowedCodeblocks: ['allowed'] });
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Visible');
+});
+
 const DEFAULTS = [
 	'- {{Link Name}} ({{Link Alias}}) - {{Link Content}}',
 	'- {{Link Name}} ({{Link Alias}})',

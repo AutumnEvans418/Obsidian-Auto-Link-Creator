@@ -1,6 +1,8 @@
 import { isTableRow, wikiSpans } from './linkDetector.ts';
 import { titleCase, variantForms } from './nlp.ts';
 import type { ParsedTemplate } from './template.ts';
+import { makeCodeblockFilter } from './validation.ts';
+import type { CodeblockFilterOptions } from './validation.ts';
 
 /** A note that phrases in a document can be linked to. */
 export interface IndexEntry {
@@ -66,7 +68,7 @@ interface Match {
 	surface: string;
 }
 
-export interface ExistingLinkOptions {
+export interface ExistingLinkOptions extends CodeblockFilterOptions {
 	capitalize?: boolean;
 	/** Skip matches whose basename equals this (avoid self-links). */
 	excludeBasename?: string;
@@ -122,7 +124,7 @@ export function applyExistingLinks(
 	const lines = doc.split('\n');
 	const out: string[] = [];
 	let count = 0;
-	let inFence = false;
+	const codeblock = makeCodeblockFilter(opts);
 	// Frontmatter block (first --- ... ---) never gets linked.
 	const fmEnd =
 		lines[0]?.trim() === '---' ? lines.findIndex((l, i) => i > 0 && l.trim() === '---') : -1;
@@ -130,12 +132,7 @@ export function applyExistingLinks(
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		if (line === undefined) continue;
-		if (/^```/.test(line)) {
-			inFence = !inFence;
-			out.push(line);
-			continue;
-		}
-		if (inFence || (fmEnd !== -1 && i <= fmEnd) || !line.trim()) {
+		if (codeblock(line) || (fmEnd !== -1 && i <= fmEnd) || !line.trim()) {
 			out.push(line);
 			continue;
 		}

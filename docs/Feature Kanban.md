@@ -6,11 +6,6 @@ kanban-plugin: board
 
 ## Todo
 
-- [ ] Footnote template support #feature
-- [ ] Table template support #feature
-- [ ] Header, bolding, etc. #feature
-- [ ] Callout template #feature
-- [ ] Diagram support #feature
 - [ ] Ignore html blocks #feature
 - [ ] Disable the notice notifications on every linking. #feature
 - [ ] Update auto link preview to include linking existing notes, not just making new ones. #feature
@@ -21,12 +16,17 @@ kanban-plugin: board
 
 ## Active
 
-- [ ] Setting to include/exclude unspecified code blocks, and to list allowed codeblocks for text to be linked (mermaid for example). #feature
+- [ ] Diagram (mermaid) support. Test that mermaid still valid after linking. #feature
+- [ ] Callout template. Title (name) + description #feature
+- [ ] Header, bolding, etc. Simple testing. #feature
+- [ ] Table template support ability to link first, second columns as name and definition #feature
+- [ ] Footnote template support. Just need explicit test. #feature
 
 
 ## Done
 
 **Complete**
+- [x] Setting to include/exclude unspecified code blocks, and to list allowed codeblocks for text to be linked (mermaid for example). Fix: **Code blocks to link** setting (comma-separated languages, e.g. mermaid) whose fenced-block contents are still linked when code blocks are ignored. Shared `makeCodeblockFilter` (src/validation.ts) drives both the template scanner (src/template.ts) and existing-note linking (src/existingLinks.ts), so ignore/allowlist now behave identically across both. #feature
 - [x] Creating links inside a table does not work properly. [[Table Fail Example]] #bug
 - [x] The "open files for undo" does not work. No files gets opened. #bug
 - [x] Bug: Save after stop typing is not maintaining scroll correctly. Additionally, it loses cursor position. It's probably not accounting for the characters added after the update is made. Fix: `facade.set` no longer re-emits the whole document as a single transaction (which collapsed the caret to the end and unpinned the viewport, then restored stale coords that ignored chars inserted before the caret). New obsidian-free `minimalChanges` (src/textDiff.ts) emits only the changed lines, so CodeMirror maps the caret by the inserted delta and holds scroll natively; `setValue` fallback keeps the rAF restore. #bug

@@ -1,6 +1,7 @@
 import { sameReference } from './nlp.ts';
 import { overlapsExistingLink } from './linkDetector.ts';
-import { frontmatterEnd, isDateLike } from './validation.ts';
+import { frontmatterEnd, isDateLike, makeCodeblockFilter } from './validation.ts';
+import type { CodeblockFilterOptions } from './validation.ts';
 
 export interface ParsedTemplate {
 	name: string;
@@ -105,9 +106,7 @@ export function compileTemplate(tpl: string): CompiledTemplate | null {
  * Match a text block against a template; returns the first hit. Child-line
  * content (indented `- item` below the header) is joined into `content`.
  */
-export interface TemplateOptions {
-	/** Skip lines inside fenced code blocks (```). */
-	ignoreCodeblocks?: boolean;
+export interface TemplateOptions extends CodeblockFilterOptions {
 	/**
 	 * Skip a phrase whose name region overlaps an existing `[[...]]` span, so
 	 * re-running on already-linked output is a no-op. Default true.
@@ -126,11 +125,6 @@ function rejectedName(name: string, opts: TemplateOptions): boolean {
 	return ignoreDates && isDateLike(name);
 }
 
-/** True when `line` is a ``` fence (opening or closing), optionally with a lang tag. */
-function isFence(line: string): boolean {
-	return /^```/.test(line);
-}
-
 /**
  * Match a text block against a template, returning every hit (in document
  * order). Unlike `matchTemplate` (first win), this pairs the same line matcher
@@ -145,21 +139,14 @@ export function findAllTemplate(
 	if (!c) return [];
 	const out: ParsedTemplate[] = [];
 	const lines = text.split('\n');
-	const skipFence = opts.ignoreCodeblocks ?? true;
 	const skipLinked = opts.skipLinked ?? true;
 	const fmEnd = frontmatterEnd(lines);
+	const codeblock = makeCodeblockFilter(opts);
 	let skipUntil = 0;
-	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		if (line === undefined) continue;
-		if (skipFence) {
-			if (isFence(line)) {
-				inFence = !inFence;
-				continue;
-			}
-			if (inFence) continue;
-		}
+		if (codeblock(line)) continue;
 		if (i <= fmEnd || i < skipUntil) continue;
 		const r = parseAt(c, lines, i, skipLinked);
 		if (r) {
@@ -189,21 +176,14 @@ export function findAllByTemplates(
 	}
 	const lines = text.split('\n');
 	const out: ParsedTemplate[] = [];
-	const skipFence = opts.ignoreCodeblocks ?? true;
 	const skipLinked = opts.skipLinked ?? true;
 	const fmEnd = frontmatterEnd(lines);
+	const codeblock = makeCodeblockFilter(opts);
 	let skipUntil = 0;
-	let inFence = false;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		if (line === undefined) continue;
-		if (skipFence) {
-			if (isFence(line)) {
-				inFence = !inFence;
-				continue;
-			}
-			if (inFence) continue;
-		}
+		if (codeblock(line)) continue;
 		if (i <= fmEnd || i < skipUntil) continue;
 		for (const c of comps) {
 			const r = parseAt(c, lines, i, skipLinked);
@@ -225,20 +205,13 @@ export function matchTemplate(
 	const c = compileTemplate(tpl);
 	if (!c) return null;
 	const lines = text.split('\n');
-	const skipFence = opts.ignoreCodeblocks ?? true;
 	const skipLinked = opts.skipLinked ?? true;
 	const fmEnd = frontmatterEnd(lines);
-	let inFence = false;
+	const codeblock = makeCodeblockFilter(opts);
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		if (line === undefined) continue;
-		if (skipFence) {
-			if (isFence(line)) {
-				inFence = !inFence;
-				continue;
-			}
-			if (inFence) continue;
-		}
+		if (codeblock(line)) continue;
 		if (i <= fmEnd) continue;
 		const r = parseAt(c, lines, i, skipLinked);
 		if (r) {

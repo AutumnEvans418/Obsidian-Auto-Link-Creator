@@ -8,7 +8,7 @@ export { DEFAULT_SETTINGS };
 export type { AutoLinkSettings };
 
 const CODEBLOCK_HELP =
-	'Skip contents of fenced code blocks (```).';
+	'Skip contents of fenced code blocks (```), except languages listed under "Code blocks to link".';
 
 const TEMPLATE_HELP =
 	'One line pattern per entry. Fields: {{Link Name}}, {{Link Alias}}, {{Link Content}}. First matching template wins.';
@@ -113,6 +113,26 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 				type: 'toggle',
 				key: 'ignoreCodeblocks',
 			},
+		});
+
+		defs.push({
+			name: 'Code blocks to link',
+			desc: 'Comma-separated code block languages whose contents are still linked, even when code blocks are ignored. E.g. mermaid',
+			render: (setting: Setting) => {
+				setting.addText((text) =>
+					text
+						.setPlaceholder('Mermaid, math')
+						.setValue(plugin.settings.allowedCodeblocks.join(', '))
+						.onChange(async (value) => {
+							plugin.settings.allowedCodeblocks = value
+								.split(',')
+								.map((l) => l.trim())
+								.filter(Boolean);
+							await plugin.saveSettings();
+						}),
+				);
+			},
+			visible: () => plugin.settings.ignoreCodeblocks,
 		});
 
 		defs.push({

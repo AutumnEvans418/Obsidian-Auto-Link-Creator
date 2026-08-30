@@ -63,7 +63,11 @@ export async function collectVaultSuggestions(
 		docs.push(doc);
 		if (s.enableTemplateKeywords) {
 			for (const group of groupByReference(
-				findAllByTemplates(doc, s.templates, { ignoreCodeblocks: s.ignoreCodeblocks, ignoreDates: s.ignoreDates })
+				findAllByTemplates(doc, s.templates, {
+				ignoreCodeblocks: s.ignoreCodeblocks,
+				ignoreDates: s.ignoreDates,
+				allowedCodeblocks: s.allowedCodeblocks,
+			})
 			)) {
 				const lead = group[0];
 				if (!lead) continue;
