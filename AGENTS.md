@@ -2,6 +2,7 @@
 - use rtk.
 - Always include release descriptions for what changed when making a new release.
 - "Work on active" means work in active item in [features](docs/Feature%20Kanban.md##Active)
+- ALWAYS RUN `npm run sync` before reading/editing anything!
 ## Repo state (read this first)
 
 - **Code is still sample scaffolding, not the real feature.** `src/main.ts` is the

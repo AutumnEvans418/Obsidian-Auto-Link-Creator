@@ -3,6 +3,11 @@ export interface Span {
 	end: number;
 }
 
+/** True when `line` is a markdown table row (cell separators are `|`). */
+export function isTableRow(line: string): boolean {
+	return /^\s*\|.*\|/.test(line);
+}
+
 /** All `[[...]]` spans in `text`; `end` is just past `]]`. */
 export function wikiSpans(text: string): Span[] {
 	const out: Span[] = [];

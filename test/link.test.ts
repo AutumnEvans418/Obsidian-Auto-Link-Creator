@@ -1,11 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { wikiLink, markdownLink, encodePath, applyLinks } from '../src/link.ts';
-import { wikiSpans, overlapsExistingLink } from '../src/linkDetector.ts';
+import { wikiSpans, overlapsExistingLink, isTableRow } from '../src/linkDetector.ts';
 import { findAllByTemplates } from '../src/template.ts';
 
-test('wiki link without alias', () => {
-	assert.equal(wikiLink({ name: 'Risk Appetite' }), '[[Risk Appetite]]');
+test('wiki link with alias', () => {
+	assert.equal(
+		wikiLink({ name: 'Access Control Systems', alias: 'ACS' }),
+		'[[Access Control Systems|ACS]]',
+	);
+});
+
+test('isTableRow detects table rows, not prose', () => {
+	assert.equal(isTableRow('| Idea | Desc |'), true);
+	assert.equal(isTableRow('| Idea            | Desc    |'), true);
+	assert.equal(isTableRow('| ---------- | --------- |'), true);
+	assert.equal(isTableRow('- plain bullet'), false);
+	assert.equal(isTableRow('plain prose'), false);
 });
 
 test('wiki link with alias', () => {

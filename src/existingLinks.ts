@@ -1,4 +1,4 @@
-import { wikiSpans } from './linkDetector.ts';
+import { isTableRow, wikiSpans } from './linkDetector.ts';
 import { titleCase, variantForms } from './nlp.ts';
 import type { ParsedTemplate } from './template.ts';
 
@@ -166,13 +166,16 @@ export function applyExistingLinks(
 		}
 		let updatedLine = '';
 		let cursor = 0;
+		const inTable = isTableRow(line);
 		for (const m of accepted) {
 			updatedLine += line.slice(cursor, m.start);
 			const display = capitalize ? titleCase(m.surface) : m.surface;
 			updatedLine +=
 				display.toLowerCase() === m.basename.toLowerCase()
 					? `[[${m.basename}]]`
-					: `[[${m.basename}|${display}]]`;
+					: inTable
+						? `[[${m.basename}\\|${display}]]`
+						: `[[${m.basename}|${display}]]`;
 			cursor = m.end;
 			count++;
 		}

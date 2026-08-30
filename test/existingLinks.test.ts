@@ -57,6 +57,13 @@ test('root mode links plural surface to singular note', () => {
 	assert.match(res.updated, /three \[\[Cow\|Cows\]\] graze/);
 });
 
+test('escapes alias pipe inside a table row so the table is intact', () => {
+	const idx = buildNoteIndex([{ path: 't/Threat Source.md', basename: 'Threat Source', aliases: [] }], 'root');
+	const doc = '| Threat Sources | Ratings |';
+	const res = applyExistingLinks(doc, idx, { capitalize: true });
+	assert.equal(res.updated, '| [[Threat Source\\|Threat Sources]] | Ratings |');
+});
+
 test('skips fenced code blocks and frontmatter', () => {
 	const idx = buildNoteIndex(entries, 'exact');
 	const doc = '---\naliases: [Cow]\n---\n```\ncow\n```\ntalk about cow here';

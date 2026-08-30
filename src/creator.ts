@@ -67,7 +67,12 @@ export async function createNote(
 
 	// Index miss — create it so Obsidian registers the file (no ghost).
 	try {
-		await vault.create(canonical, noteBody(f));
+		const body = noteBody(f);
+		await vault.create(canonical, body);
+		// Route the created note through onWrite too: the open-for-undo writer
+		// opens it in a background tab so the built-in Undo can revert the
+		// initial write, matching the append path below.
+		if (onWrite) await onWrite(canonical, body);
 		return { path: canonical, created: true };
 	} catch {
 		// An orphaned file on disk (different case, or not yet indexed).

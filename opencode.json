@@ -16,7 +16,8 @@
     "webfetch": "allow",
     "websearch": "allow",
     "external_directory": {
-        "/mnt/36a42874-96c0-46e4-85bb-fafcf3d59e18/ObsidianVault/vaults/plugin-dev/**": "allow"
+        "/mnt/36a42874-96c0-46e4-85bb-fafcf3d59e18/ObsidianVault/vaults/plugin-dev/**": "allow",
+        "/tmp/**": "allow"
     }
   }
 }

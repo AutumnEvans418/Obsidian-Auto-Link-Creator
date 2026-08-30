@@ -107,7 +107,10 @@ export default class AutoLinkCreator extends Plugin {
 			file: TFile,
 			state?: OpenViewState,
 		): Promise<IEditorView> => {
-			const leaf = app.workspace.getLeaf(false);
+			// getLeaf(false) reuses the active leaf and would navigate the user
+			// away; 'tab' spawns a dedicated background leaf, and active:false
+			// keeps focus on the current note.
+			const leaf = app.workspace.getLeaf('tab');
 			await leaf.openFile(file, state ?? { active: false });
 			const view = leaf.view;
 			if (!(view instanceof MarkdownView))
@@ -309,6 +312,28 @@ export default class AutoLinkCreator extends Plugin {
 		callback: () => {
 			void this.withLoading('Scanning vault…', () => processVaultAndPreview(this.facade()));
 		},
+		});
+
+		// Temp debug command: exercise the open-for-undo path. Appends a marker
+		// line to the active note inside a background tab (same undoableWriter
+		// the preview flows use); Ctrl-Z in that tab should strip the marker.
+		this.addCommand({
+			id: 'debug-open-for-undo',
+			name: 'Debug: append line in background tab for undo',
+			editorCallback: async (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
+				const path = ctx.file?.path ?? '';
+				if (!path || !(ctx.file instanceof TFile)) {
+					new Notice('Auto link creator: open a Markdown note first');
+					return;
+				}
+				const writer = this.facade(editor, path).undoableWriter();
+				if (!writer) {
+					new Notice('Auto link creator: enable "open files for undo" in settings');
+					return;
+				}
+				await writer(path, `${editor.getValue()}\n<!-- alcm-undo-test -->`);
+				new Notice('Opened background tab; press ctrl-z there to remove the marker');
+			},
 		});
 
 		// Status bar trigger for the current-file preview (not available on mobile).
