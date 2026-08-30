@@ -6,6 +6,7 @@ import type { IPlugin } from './services/ipluginInterface.ts';
 /** Case-insensitive name (lowercased, extension stripped). */
 const bare = (p: string) => p.split('/').pop()?.replace(/\.md$/i, '') ?? '';
 
+
 /**
  * Resolve a real file path in `folder` whose name matches `name` regardless of
  * case (for detecting orphaned files Obsidian hasn't indexed). Returns null

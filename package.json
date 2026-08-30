@@ -5,8 +5,9 @@
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
-		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"sync": "rsync -rtuv ./docs/ ../../../Plugin/Link/ && rsync -rtuv ../../../Plugin/Link/ ./docs/",
+		"dev": "npm run sync && node esbuild.config.mjs",
+		"build": "npm run sync && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "node --test",
 		"svelte-check": "svelte-check --tsconfig tsconfig.json",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",

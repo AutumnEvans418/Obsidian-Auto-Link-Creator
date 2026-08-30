@@ -6,16 +6,16 @@
 
 - **Code is still sample scaffolding, not the real feature.** `src/main.ts` is the
   stock Obsidian sample plugin (`MyPlugin`, `SampleModal`, placeholder commands/ribbon/
-  statusbar). The actual "Auto Link Creator" design + roadmap live in **`PLAN.md`**
+  statusbar). The actual "Auto Link Creator" design + roadmap live in **`docs/PLAN.md`**
   (linking formats, phrase-count NLP, variants/pluralization, aliases, preview).
-  Manifest description and `README.md` describe *intended* features; only `PLAN.md`
-  reflects reality. Build features from `PLAN.md`, not the README.
+  Manifest description and `README.md` describe *intended* features; only `docs/PLAN.md`
+  reflects reality. Build features from `docs/PLAN.md`, not the README.
 - Plugin id `auto-link-creator` (manifest) vs folder `Obsidian-Auto-Link-Creator`.
   Match `id` to the folder for local install; never change `id` after release.
 
-## What to build (from PLAN.md)
+## What to build (from docs/PLAN.md)
 
-Read `PLAN.md` before implementing; it is the authoritative spec. Core workflows:
+Read `docs/PLAN.md` before implementing; it is the authoritative spec. Core workflows:
 
 - **Template/linked list syntax**: parse `- {{Link Name}} ({{Link Alias}}) - {{Link Content}}`
   style lists → create `[[Link Name|Link Alias]]` wiki links and the target notes.
@@ -29,7 +29,7 @@ Read `PLAN.md` before implementing; it is the authoritative spec. Core workflows
   companion plugin (obsidian-automatic-linker) already handles.
 - Reference implementations to borrow from: `kdnk/obsidian-automatic-linker`
   (link-on-save, aliases), `danrhodes/AutoKeywordLinker` (vault keyword scanning, preview).
-- `PLAN.md` includes multiple link/output examples — use them as your fixtures.
+- `docs/PLAN.md` includes multiple link/output examples — use them as your fixtures.
 - Leftover "sample"/`MyPlugin` naming in `package.json`, `README.md`, `settings.ts`,
   and `main.ts` is stale and should be renamed as part of real work. Note the
   circular import `settings.ts` ↔ `main.ts` (settings imports `MyPlugin` only for typing).
@@ -50,50 +50,9 @@ imported by the plugin files.
 Add temp debug command so it can be tested in obsidian.
 Add test when fixing bugs.
 
-- [x] Ignore code blocks
-- [x] `nlp-compromise` dep; wrap plural/singular/past/participle/root in obsidian-free `src/nlp.ts`
-- [x] Template parser: match line vs templates (first match wins) → `ParsedTemplate {name, alias, content}`
-- [x] Title casing: capitalize each first letter of Link Name
-- [x] Variant generation: `{plural, singular, lemmatized, normalized}` set from a word via `nlp.ts`
-- [x] Link detector: skip phrase whose token overlaps a `[[...]]` span
-- [x] Link builders: wiki `[[Name|Alias]]` + markdown-relative `[text](path.md)` (URL-encoded path)
-- [x] Keyword extractor: tokenize, strip stop-words/punctuation, frequency count, drop <3-char words
-- [x] Note creator: create `Name.md` (alias frontmatter + content); if exists, append content to bottom.
-- [x] If enabled, opens created file without switching active file so that undo works.
-- [x] File scanner: single `scanFile` pipeline, template+phrase+variant passes combined + deduped
-- [x] Folder resolution: same-folder; vault-wide highest common folder of referencing files else root
-- [x] Process-single-file + on-save trigger (rewrites source to insert links)
-- [x] Process-whole-vault command (scan all `.md`, resolve folders, batch apply)
-- [x] Preview modal: suggested links + note content, select/apply before committing (gates destructive batch)
-- [x] Settings: command on/off, on-save on/off toggles + relative-link, auto-create, capitalize
-- [x] Idempotency test: second run near-no-op (notes exist ⇒ skip/append)
-- [x] Undo/rollback of a preview apply (multi-file mutations)
-- [x] Setting for template based keywords.
-- [x] Setting for NLP based keywords.
+See [feature list](docs/Feature%20Kanban.md).
 
-- [x] Add setting and feature to link existing note based on its file name or list of aliases, following the same capitalization rules if enabled. Instead of replacing a link with a new/non-existing file name, this will search the index for an existing note and use that if it matches. Different options for exact match or nlp root match. Use this plugin for inspiration:  https://github.com/kdnk/obsidian-automatic-linker. This plugin does basically that, except that it doesn't have nlp support.
-
-- [x] Preserve scroll position on save.
-- [x] On save when dealing with checking for existing notes should use nlp to find close matches, such as plurals, and link them, if the setting is enabled. Armor Classes -> Armor Class (existing note)
-- [x] Bug: Add template is at the bottom of settings rather than other the template list.
-- [x] Bug: "Process current file and preview links" creates the suggested file, but doesn't actually create the link in the current file. Additionally, "--" was included as a keyword, which is unexpected.
-  - Fix: after creating notes, an `applyExistingLinks` pass links selected names/aliases in the source doc (NLP suggestions have no positional hits); template finders reject punctuation-only names like `--`.
-- [x] Bug: On save, front matter gets converted to links, which is unexpected.
-  - Fix: YAML frontmatter block is always skipped by template scanning and NLP keyword counting; new **Ignore dates** setting (default on) drops date/number-like phrases (`2026`, `2026-08-24T…`).
-
-- [x] Feature: Update the preview to present nlp, template, or both (default) keyword findings.
-  - Fix: **Preview keyword findings** dropdown setting (`previewKeywords: 'both' | 'template' | 'nlp'`); `filterByPreviewMode` (src/ui/suggestion.ts) filters by provenance fields before preview in both preview flows; vault collector sets `nlpRoot` only when the NLP pass contributed.
-
-- [x] Feature: Create a setting in which you can set a folder for which new notes should be added to. Defaults to the current folder of the current note. There is another setting for two options. Subfolder, or Closest Shared Folder. If subfolder and set to "Concepts", then a "Concepts" subfolder will be created in the current note directory. If it's "Concepts" and set to closest shared, then it will check for the closest existing "Concepts" folder in the current dir and work up the parent tree. If none is found, then it will prompt for where to create it.
-  - Fix: **New note folder** setting (blank = source note's folder) + **New folder mode** dropdown (Subfolder default / Closest shared folder). Pure `resolveTargetFolder` (src/folders.ts); `targetFolder()` in commandService resolves per apply run — closest-miss prompts once per run via `promptFolder` (modal in main.ts), cancel falls back to subfolder. Vault flow applies it to each group's targetFolder. Facade `create` now mkdirs missing parents; manifest minAppVersion bumped 1.1.0→1.4.0 (Vault.createFolder).
-
-- [x] Bug: Update existing links on save should maintain scroll.
-  - Fix: defer scroll/cursor restore in `set()` via `requestAnimationFrame` so Obsidian's post-save layout settles first.
-- [x] Feature: Update on save should match the longest existing link/file/alias. For example, if the text says "Information Assets" and the following links exist: "Information", "Information Assets", "Information Assets" should be the link that created.
-  - Fix: sort tiebreaker in `applyExistingLinks` (`b.end - a.end`) ensures longest match at same start position wins; overlap rejection then drops shorter candidates.
-
-- [x] Feature: Proximity note wins.
-- [x] Feature: Link unresolved links.
+Work on item in active.
 
 ## Commands (npm)
 
@@ -113,7 +72,7 @@ npm run version      # lifecycle hook of `npm version` — don't run directly
 
 - `src/main.ts` — plugin entry, lifecycle. Keep minimal.
 - `src/settings.ts` — settings interface, `DEFAULT_SETTINGS`, settings tab.
-- `PLAN.md` — product spec/feature roadmap (the source of truth for what to build).
+- `docs/PLAN.md` — product spec/feature roadmap (the source of truth for what to build).
 - `main.js`, `main.js.map` — **generated**, gitignored, never commit.
 - `esbuild.config.mjs` — bundles `src/main.ts` → `main.js` (cjs, es2021); `obsidian`,
   `electron`, `@codemirror/*`, `@lezer/*` external.
