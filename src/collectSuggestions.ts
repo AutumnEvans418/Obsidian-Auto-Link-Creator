@@ -47,6 +47,7 @@ export function dedupeSuggestions(selected: Suggestion[]): Suggestion[] {
 			out.push(s);
 			continue;
 		}
+		if (s.existing) canon.existing = true;
 		for (const a of [s.name, ...s.aliases]) {
 			if (a !== canon.name && !canon.aliases.includes(a)) canon.aliases.push(a);
 		}

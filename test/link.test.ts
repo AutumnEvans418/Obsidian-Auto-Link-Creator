@@ -158,3 +158,18 @@ test('table template flows through the full pipeline', () => {
 		['| [[Risk Appetite]] | Level accepted |', '| [[Armor Class (AC)]] | Damage threshold |'].join('\n'),
 	);
 });
+
+test('applyLinks absorbs a partial link inside a longer definition (typing fail)', () => {
+	const doc =
+		'- [[Security]] Education Training Awareness (SETA) - Improve [[Security]] knowledge.\n' +
+		'- Cow - moo';
+	const hits = findAllByTemplates(doc, ['- {{Link Name}} ({{Link Alias}}) - {{Link Content}}'], {
+		matchLongerAcrossLinks: true,
+	});
+	assert.equal(hits.length, 2);
+	const out = applyLinks(doc, hits, true);
+	assert.equal(
+		out,
+		'- [[Security Education Training Awareness]] (SETA) - Improve [[Security]] knowledge.\n- [[Cow]] - moo',
+	);
+});

@@ -1,5 +1,5 @@
 import { sameReference } from './nlp.ts';
-import { overlapsExistingLink } from './linkDetector.ts';
+import { wikiSpans } from './linkDetector.ts';
 import { frontmatterEnd, isDateLike, makeCodeblockFilter } from './validation.ts';
 import type { CodeblockFilterOptions } from './validation.ts';
 
@@ -164,6 +164,13 @@ export interface TemplateOptions extends CodeblockFilterOptions {
 	 * re-running on already-linked output is a no-op. Default true.
 	 */
 	skipLinked?: boolean;
+	/**
+	 * Still match when an existing link overlaps only PART of the name (the
+	 * linked span is shorter than the name). Fixes the typing-fail case where
+	 * the existing-links pass already linked the first word of a longer
+	 * definition, so preview can suggest the whole phrase. Default true.
+	 */
+	matchLongerAcrossLinks?: boolean;
 	/** Skip hits whose name is date/number-like (e.g. `2026-08-24`). */
 	ignoreDates?: boolean;
 }
@@ -192,6 +199,7 @@ export function findAllTemplate(
 	const out: ParsedTemplate[] = [];
 	const lines = text.split('\n');
 	const skipLinked = opts.skipLinked ?? true;
+	const allowPartial = opts.matchLongerAcrossLinks ?? false;
 	const fmEnd = frontmatterEnd(lines);
 	const codeblock = makeCodeblockFilter(opts);
 	let skipUntil = 0;
@@ -200,7 +208,7 @@ export function findAllTemplate(
 		if (line === undefined) continue;
 		if (codeblock(line)) continue;
 		if (i <= fmEnd || i < skipUntil) continue;
-		const r = parseAt(c, lines, i, skipLinked);
+		const r = parseAt(c, lines, i, skipLinked, allowPartial);
 		if (r) {
 			if (rejectedName(r.hit.name, opts)) continue;
 			out.push({ ...r.hit, template: tpl });
@@ -229,6 +237,7 @@ export function findAllByTemplates(
 	const lines = text.split('\n');
 	const out: ParsedTemplate[] = [];
 	const skipLinked = opts.skipLinked ?? true;
+	const allowPartial = opts.matchLongerAcrossLinks ?? false;
 	const fmEnd = frontmatterEnd(lines);
 	const codeblock = makeCodeblockFilter(opts);
 	let skipUntil = 0;
@@ -238,7 +247,7 @@ export function findAllByTemplates(
 		if (codeblock(line)) continue;
 		if (i <= fmEnd || i < skipUntil) continue;
 		for (const c of comps) {
-			const r = parseAt(c, lines, i, skipLinked);
+			const r = parseAt(c, lines, i, skipLinked, allowPartial);
 			if (!r) continue;
 			if (rejectedName(r.hit.name, opts)) break;
 			out.push({ ...r.hit, template: c.template });
@@ -258,6 +267,7 @@ export function matchTemplate(
 	if (!c) return null;
 	const lines = text.split('\n');
 	const skipLinked = opts.skipLinked ?? true;
+	const allowPartial = opts.matchLongerAcrossLinks ?? false;
 	const fmEnd = frontmatterEnd(lines);
 	const codeblock = makeCodeblockFilter(opts);
 	for (let i = 0; i < lines.length; i++) {
@@ -265,7 +275,7 @@ export function matchTemplate(
 		if (line === undefined) continue;
 		if (codeblock(line)) continue;
 		if (i <= fmEnd) continue;
-		const r = parseAt(c, lines, i, skipLinked);
+		const r = parseAt(c, lines, i, skipLinked, allowPartial);
 		if (r) {
 			if (rejectedName(r.hit.name, opts)) continue;
 			return { ...r.hit, template: tpl };
@@ -319,11 +329,50 @@ function gatherFor(shape: Shape): (lines: string[], i: number) => string[] {
 	return shape === 'quote' ? gatherQuoteChildren : gatherChildren;
 }
 
+/**
+ * Strip the `[[`/`]]` markers of wikilink spans that overlap a captured name
+ * region, so a partially-linked phrase keeps only its plain text. Returns the
+ * cleaned name and the start index of that text in the original line.
+ */
+function unwrapName(
+	line: string,
+	captured: string,
+	capturedStart: number,
+	spans: Array<{ start: number; end: number }>,
+): { name: string; nameStart: number } {
+	const regionEnd = capturedStart + captured.length;
+	const overlapping = spans.filter(
+		(s) => capturedStart < s.end && regionEnd > s.start && !(s.start <= capturedStart && s.end >= regionEnd),
+	);
+	if (!overlapping.length) return { name: captured, nameStart: capturedStart };
+	const removed = new Array<boolean>(line.length).fill(false);
+	for (const s of overlapping) {
+		removed[s.start] = true;
+		removed[s.start + 1] = true;
+		removed[s.end - 2] = true;
+		removed[s.end - 1] = true;
+	}
+	let name = '';
+	for (let i = capturedStart; i < regionEnd; i++) {
+		if (removed[i]) continue;
+		name += line[i] ?? '';
+	}
+	// Markers before the name move it left; markers inside leave it put.
+	return { name, nameStart: capturedStart - countBefore(removed, capturedStart) };
+}
+
+function countBefore(removed: boolean[], until: number): number {
+	let n = 0;
+	for (let i = 0; i < until; i++) if (removed[i]) n++;
+	return n;
+}
+
 function parseAt(
 	c: CompiledTemplate,
 	lines: string[],
 	i: number,
 	skipLinked: boolean,
+	allowPartialLink: boolean,
 ): ParseResult | null {
 	const line = lines[i];
 	if (line === undefined) return null;
@@ -331,21 +380,38 @@ function parseAt(
 	if (!m) return null;
 	const nameCaptured = m[1];
 	if (!nameCaptured?.trim()) return null;
-	const name = nameCaptured.trim();
-	const nameStart = line.indexOf(name);
+	const captured = nameCaptured.trim();
+	const capturedStart = line.indexOf(captured);
 	// Skip a phrase whose name region overlaps an existing `[[...]]` span so a
-	// second run on already-linked output is a no-op (idempotency).
+	// second run on already-linked output is a no-op (idempotency). When the
+	// entire name is already wrapped, always skip (pure re-link); when only a
+	// part is linked, keep it if `matchLongerAcrossLinks` allows the longer
+	// definition to win.
+	let spans: Array<{ start: number; end: number }> = [];
 	if (skipLinked) {
-		if (overlapsExistingLink(line, nameStart, nameStart + name.length)) return null;
+		spans = wikiSpans(line);
+		const regionEnd = capturedStart + captured.length;
+		let overlaps = false;
+		let fullyCovered = false;
+		for (const s of spans) {
+			if (capturedStart < s.end && regionEnd > s.start) overlaps = true;
+			if (s.start <= capturedStart && s.end >= regionEnd) fullyCovered = true;
+		}
+		if (fullyCovered) return null;
+		if (overlaps && !allowPartialLink) return null;
 	}
+	// When a partial link overlaps the name, unwrap the `[[ ]]` markers from
+	// the captured text so the stored name equals the plain phrase applyLinks
+	// will finally wrap (e.g. `[[Security]] Education…` → `Security Education…`).
+	let { name, nameStart } = unwrapName(line, captured, capturedStart, spans);
 	const out: ParsedTemplate = { name, nameStart, lineIndex: i };
 	const aliasCaptured = c.fields.includes('alias') ? m[2] : undefined;
 	if (aliasCaptured) out.alias = aliasCaptured.trim();
 	let childCount = 0;
 	if (c.hasContent) {
 		const ci = c.fields.indexOf('content');
-		const captured = m[ci + 1];
-		let content = captured?.trim() ?? '';
+		const capturedContent = m[ci + 1];
+		let content = capturedContent?.trim() ?? '';
 		// Children win over inline when children exist (for a child template),
 		// and are used as a fallback when a line has no inline content.
 		if (!content || c.contentIsChild) {

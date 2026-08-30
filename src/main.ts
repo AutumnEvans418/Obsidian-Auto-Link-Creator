@@ -150,7 +150,9 @@ export default class AutoLinkCreator extends Plugin {
 					if (cursor && editor.setCursor) editor.setCursor(cursor);
 				});
 			},
-			notice: (msg) => new Notice(msg),
+			notice: (msg) => {
+				if (!readSettings().disableNotices) new Notice(msg);
+			},
 			get settings() {
 				return readSettings();
 			},
@@ -323,16 +325,19 @@ export default class AutoLinkCreator extends Plugin {
 			editorCallback: async (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
 				const path = ctx.file?.path ?? '';
 				if (!path || !(ctx.file instanceof TFile)) {
-					new Notice('Auto link creator: open a Markdown note first');
+					if (!this.settings.disableNotices)
+						new Notice('Auto link creator: open a Markdown note first');
 					return;
 				}
 				const writer = this.facade(editor, path).undoableWriter();
 				if (!writer) {
-					new Notice('Auto link creator: enable "open files for undo" in settings');
+					if (!this.settings.disableNotices)
+						new Notice('Auto link creator: enable "open files for undo" in settings');
 					return;
 				}
 				await writer(path, `${editor.getValue()}\n<!-- alcm-undo-test -->`);
-				new Notice('Opened background tab; press ctrl-z there to remove the marker');
+				if (!this.settings.disableNotices)
+					new Notice('Opened background tab; press ctrl-z there to remove the marker');
 			},
 		});
 
@@ -343,7 +348,8 @@ export default class AutoLinkCreator extends Plugin {
 		this.registerDomEvent(statusBarItemEl, 'click', () => {
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!view) {
-				new Notice('Auto link creator: no active Markdown file');
+				if (!this.settings.disableNotices)
+					new Notice('Auto link creator: no active Markdown file');
 				return;
 			}
 			void this.withLoading('Scanning current file…', () =>

@@ -16,6 +16,8 @@ export interface Suggestion {
 	nlpRoot?: string;
 	/** Resolved folder to create the note in (vault-wide scan). */
 	targetFolder?: string;
+	/** The note already exists; applying only links occurrences, creates nothing. */
+	existing?: boolean;
 }
 
 /** Keyword source a suggestion was found by. */

@@ -6,8 +6,14 @@ export interface AutoLinkSettings {
 	ignoreCodeblocks: boolean;
 	/** Fenced-block languages (e.g. mermaid) still linked inside when code blocks are ignored. */
 	allowedCodeblocks: string[];
+	/** Skip lines that begin an HTML tag/comment (raw `<div>`, `<!-- …`). */
+	ignoreHtml: boolean;
+	/** Suppress the notice notifications after each linking run. */
+	disableNotices: boolean;
 	/** Skip date/number-like phrases (e.g. `2026`, `2026-08-24`) when linking. */
 	ignoreDates: boolean;
+	/** Match a longer definition whose first words were already lowercase-linked. */
+	matchLongerAcrossLinks: boolean;
 	/** Capitalize each first letter of note names and link text. */
 	capitalize: boolean;
 	/** Run keyword detection driven by `templates` lines. */
@@ -50,7 +56,10 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	],
 	ignoreCodeblocks: true,
 	allowedCodeblocks: [],
+	ignoreHtml: false,
+	disableNotices: false,
 	ignoreDates: true,
+	matchLongerAcrossLinks: false,
 	capitalize: true,
 	enableTemplateKeywords: true,
 	enableNlpKeywords: true,

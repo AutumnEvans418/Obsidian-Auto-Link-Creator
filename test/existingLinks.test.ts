@@ -99,6 +99,18 @@ test('non-allowlisted block stays skipped alongside an allowlisted one', () => {
 	assert.match(lines[4] ?? '', /\[\[Cow\]\] there/);
 });
 
+test('html lines linked by default, skipped when ignoreHtml is on', () => {
+	const idx = buildNoteIndex(entries, 'exact');
+	const doc = '<table><tr><td>cow</td></tr></table>';
+	const on = applyExistingLinks(doc, idx, { capitalize: false });
+	assert.equal(on.count, 1);
+	assert.match(on.updated, /\[\[Cow\]\]/);
+
+	const offRes = applyExistingLinks(doc, idx, { capitalize: false, ignoreHtml: true });
+	assert.equal(offRes.updated, doc);
+	assert.equal(offRes.count, 0);
+});
+
 test('mermaid sequence diagram stays byte-identical by default', () => {
 	const idx = buildNoteIndex(entries, 'exact');
 	const doc = [
@@ -236,4 +248,33 @@ test('buildNoteIndex without currentPath falls back to alphabetical', () => {
 	const idx = buildNoteIndex(dupes, 'exact');
 	// Alphabetical: a/Cow.md < z/Cow.md → A Cow wins.
 	assert.equal(idx.get('cow'), 'A Cow');
+});
+
+import { findExistingHits } from '../src/existingLinks.ts';
+
+test('findExistingHits reconstructs applyExistingLinks output', () => {
+	const idx = buildNoteIndex(
+		[
+			{ path: 'Cow.md', basename: 'Cow', aliases: [] },
+			{ path: 'Party.md', basename: 'Party', aliases: [] },
+			{ path: 'Risk.md', basename: 'Risk', aliases: [] },
+		],
+		'exact',
+	);
+	const doc = 'a cow eats grass\nsee [[Cow]] already linked\nparty time\n---\nrisk: none\n---\ncow';
+	const res = applyExistingLinks(doc, idx, { capitalize: true });
+	assert.equal(res.count, 4);
+	// Every hit -> applying in the same order yields the same rewritten text.
+	const hits = findExistingHits(doc, idx, { capitalize: true });
+	const lines = doc.split('\n');
+	for (const h of hits) {
+		const line = lines[h.lineIndex] ?? '';
+		const display = h.surface;
+		const piece =
+			display.toLowerCase() === h.basename.toLowerCase()
+				? `[[${h.basename}]]`
+				: `[[${h.basename}|${display}]]`;
+		lines[h.lineIndex] = line.slice(0, h.start) + piece + line.slice(h.end);
+	}
+	assert.equal(lines.join('\n'), res.updated);
 });

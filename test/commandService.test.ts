@@ -26,6 +26,7 @@ function fakePlugin(opts: {
 		applyPreview: (indices: number[]) => Promise<void>;
 		previewSuggestions: Suggestion[];
 		notices: string[];
+		files: Map<string, string>;
 	} = {
 		value: () => opts.doc ?? '',
 		set: () => {},
@@ -65,6 +66,7 @@ function fakePlugin(opts: {
 		},
 		undoableWriter: () => undefined,
 		preview: (suggestions, onApply) => previews.push({ suggestions, onApply }),
+		files,
 		get applyPreview() {
 			assert.equal(previews.length, 1, 'expected exactly one preview');
 			return previews[0]!.onApply;
@@ -95,6 +97,42 @@ test('linkTemplateKeywords quiet mode skips no-match notice', () => {
 	const plugin = fakePlugin({ doc: 'nothing here' });
 	linkTemplateKeywords(plugin, true);
 	assert.deepEqual(plugin.notices, []);
+});
+
+test('linkTemplateKeywords skips the doc when frontmatter disables auto-link', () => {
+	const plugin = fakePlugin({ doc: '---\nauto-link: false\n---\n- Cow - moo' });
+	let setWith = '';
+	plugin.set = (c) => {
+		setWith = c;
+	};
+
+	linkTemplateKeywords(plugin);
+
+	assert.equal(setWith, '');
+	assert.deepEqual(plugin.notices, []);
+});
+
+test('linkExistingNotes skips the doc when frontmatter disables auto-link', () => {
+	const plugin = fakePlugin({
+		doc: '---\nauto-link: false\n---\ncow grazes',
+		files: { 'Cow.md': 'the cow' },
+	});
+	linkExistingNotes(plugin);
+	assert.deepEqual(plugin.notices, []);
+});
+
+test('linkExistingNotes honors ignoreHtml setting', () => {
+	const plugin = fakePlugin({
+		doc: '<div>cow grazes</div>',
+		files: { 'Cow.md': 'the cow' },
+		settings: { ignoreHtml: true },
+	});
+	let setWith = '';
+	plugin.set = (c) => {
+		setWith = c;
+	};
+	linkExistingNotes(plugin);
+	assert.equal(setWith, '');
 });
 
 test('processFileAndPreview creates note then links source', async () => {
@@ -315,4 +353,29 @@ test('linkExistingNotes: real file takes precedence over unresolved link', () =>
 	// Real file basename "FileB" should be used (not an unresolved entry).
 	assert.match(setWith, /\[\[FileB\]\] is here/);
 	assert.ok(plugin.getFileByPath('b/FileB.md'), 'real file exists');
+});
+
+test('preview includes existing-note suggestions; applying links without creating', async () => {
+	const plugin = fakePlugin({
+		source: 'Note.md',
+		doc: 'a cow and security talk',
+		files: { 'Cow.md': 'existing content', 'Security.md': 'existing content' },
+		settings: {
+			enableTemplateKeywords: false,
+			enableNlpKeywords: false,
+			enableExistingLinks: true,
+			existingMatchMode: 'exact',
+		},
+	});
+	processFileAndPreview(plugin);
+	const pairs = plugin.previewSuggestions.map((s) => [s.name, s.existing] as const);
+	assert.equal(pairs.length, 2);
+	assert.deepEqual(pairs, [
+		['Cow', true],
+		['Security', true],
+	]);
+	await plugin.applyPreview([0]);
+	assert.equal(plugin.files.size, 2, 'no new note created');
+	assert.equal(plugin.files.get('Cow.md'), 'existing content');
+	assert.equal(plugin.notices.at(-1), 'Created 0, appended 0. Linked 1 keyword(s).');
 });

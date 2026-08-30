@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidTemplate, isDateLike, frontmatterEnd } from '../src/validation.ts';
+import {
+	isValidTemplate,
+	isDateLike,
+	frontmatterEnd,
+	frontmatterDisabled,
+	makeCodeblockFilter,
+} from '../src/validation.ts';
 
 test('accepts a template with {{Link Name}}', () => {
 	assert.equal(isValidTemplate('- {{Link Name}} ({{Link Alias}}) - {{Link Content}}'), true);
@@ -35,4 +41,21 @@ test('frontmatterEnd finds the closing fence, or -1', () => {
 	assert.equal(frontmatterEnd(['---', 'a: 1', '---', 'body']), 2);
 	assert.equal(frontmatterEnd(['no frontmatter', '---']), -1);
 	assert.equal(frontmatterEnd([]), -1);
+});
+
+test('frontmatterDisabled flags a falsy auto-link property', () => {
+	assert.equal(frontmatterDisabled('---\nauto-link: false\n---\nbody'), true);
+	assert.equal(frontmatterDisabled('---\nauto-link: no\n---\nbody'), true);
+	assert.equal(frontmatterDisabled('---\nauto-link: true\n---\nbody'), false);
+	assert.equal(frontmatterDisabled('---\ntitle: x\n---\nbody'), false);
+	assert.equal(frontmatterDisabled('no frontmatter at all'), false);
+});
+
+test('codeblock filter skips html lines only when ignoreHtml is on', () => {
+	const html = '   <div class="x">cow</div>';
+	assert.equal(makeCodeblockFilter({})(html), false);
+	assert.equal(makeCodeblockFilter({ ignoreHtml: true })(html), true);
+	assert.equal(makeCodeblockFilter({ ignoreHtml: true })('<!-- cow -->'), true);
+	assert.equal(makeCodeblockFilter({ ignoreHtml: true })('- <i>inline</i>'), false);
+	assert.equal(makeCodeblockFilter({ ignoreHtml: true })('plain prose'), false);
 });

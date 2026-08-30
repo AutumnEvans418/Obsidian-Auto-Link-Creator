@@ -108,22 +108,21 @@ export function foldHitTargets(
 }
 
 /**
- * Replace plain-text occurrences of indexed note names/aliases with wiki
- * links to those notes. Skips matches inside `[[...]]` spans, fenced code
- * blocks, and frontmatter. The original surface text is kept as the link
- * alias unless it equals the note name (then a bare `[[Name]]`), so linked
- * output contains no bare occurrences left to match (idempotent).
+ * Plain-text occurrences of indexed note names/aliases, in scan order. The
+ * shared core behind `applyExistingLinks` and the preview's existing-note
+ * suggestions. Skips matches inside `[[...]]` spans, fenced code blocks, HTML
+ * blocks (when configured), and frontmatter. Overlapping matches on a line are
+ * deduped longest-first; later accepted matches never start inside an earlier
+ * one.
  */
-export function applyExistingLinks(
+export function findExistingHits(
 	doc: string,
 	index: Map<string, string>,
 	opts: ExistingLinkOptions = {},
-): { updated: string; count: number } {
-	if (!index.size) return { updated: doc, count: 0 };
-	const capitalize = opts.capitalize ?? true;
+): ExistingHit[] {
+	if (!index.size) return [];
 	const lines = doc.split('\n');
-	const out: string[] = [];
-	let count = 0;
+	const hits: ExistingHit[] = [];
 	const codeblock = makeCodeblockFilter(opts);
 	// Frontmatter block (first --- ... ---) never gets linked.
 	const fmEnd =
@@ -132,10 +131,7 @@ export function applyExistingLinks(
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		if (line === undefined) continue;
-		if (codeblock(line) || (fmEnd !== -1 && i <= fmEnd) || !line.trim()) {
-			out.push(line);
-			continue;
-		}
+		if (codeblock(line) || (fmEnd !== -1 && i <= fmEnd) || !line.trim()) continue;
 
 		const matches: Match[] = [];
 		for (const [key, basename] of index) {
@@ -151,20 +147,57 @@ export function applyExistingLinks(
 		}
 		matches.sort((a, b) => a.start - b.start || b.end - a.end);
 		const taken = wikiSpans(line);
-		const accepted: Match[] = [];
 		for (const m of matches) {
 			if (overlapsAny(taken, m.start, m.end)) continue;
-			accepted.push(m);
 			taken.push({ start: m.start, end: m.end });
+			hits.push({
+				lineIndex: i,
+				start: m.start,
+				end: m.end,
+				basename: m.basename,
+				surface: m.surface,
+			});
 		}
-		if (!accepted.length) {
-			out.push(line);
-			continue;
-		}
+	}
+	return hits;
+}
+
+export interface ExistingHit {
+	lineIndex: number;
+	start: number;
+	end: number;
+	basename: string;
+	surface: string;
+}
+
+/**
+ * Replace plain-text occurrences of indexed note names/aliases with wiki
+ * links to those notes. The original surface text is kept as the link alias
+ * unless it equals the note name (then a bare `[[Name]]`), so linked output
+ * contains no bare occurrences left to match (idempotent).
+ */
+export function applyExistingLinks(
+	doc: string,
+	index: Map<string, string>,
+	opts: ExistingLinkOptions = {},
+): { updated: string; count: number } {
+	if (!index.size) return { updated: doc, count: 0 };
+	const capitalize = opts.capitalize ?? true;
+	const hits = findExistingHits(doc, index, opts);
+	if (!hits.length) return { updated: doc, count: 0 };
+	const lines = doc.split('\n');
+	const byLine = new Map<number, ExistingHit[]>();
+	for (const h of hits) {
+		const bucket = byLine.get(h.lineIndex);
+		if (bucket) bucket.push(h);
+		else byLine.set(h.lineIndex, [h]);
+	}
+	for (const [i, lineHits] of byLine) {
+		const line = lines[i] ?? '';
 		let updatedLine = '';
 		let cursor = 0;
 		const inTable = isTableRow(line);
-		for (const m of accepted) {
+		for (const m of lineHits) {
 			updatedLine += line.slice(cursor, m.start);
 			const display = capitalize ? titleCase(m.surface) : m.surface;
 			updatedLine +=
@@ -174,10 +207,9 @@ export function applyExistingLinks(
 						? `[[${m.basename}\\|${display}]]`
 						: `[[${m.basename}|${display}]]`;
 			cursor = m.end;
-			count++;
 		}
 		updatedLine += line.slice(cursor);
-		out.push(updatedLine);
+		lines[i] = updatedLine;
 	}
-	return { updated: out.join('\n'), count };
+	return { updated: lines.join('\n'), count: hits.length };
 }

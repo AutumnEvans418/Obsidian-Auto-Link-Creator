@@ -136,11 +136,38 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 		});
 
 		defs.push({
+			name: 'Ignore html blocks',
+			desc: 'Skip lines that begin an HTML tag or comment (raw <div>, <iframe>, <!-- …) when linking.',
+			control: {
+				type: 'toggle',
+				key: 'ignoreHtml',
+			},
+		});
+
+		defs.push({
+			name: 'Disable notice notifications',
+			desc: 'Suppress the notice that reports each linking result (e.g. "Linked N keyword(s)").',
+			control: {
+				type: 'toggle',
+				key: 'disableNotices',
+			},
+		});
+
+		defs.push({
 			name: 'Ignore dates',
 			desc: 'Skip date/number-like phrases (e.g. 2026, 2026-08-24) when linking.',
 			control: {
 				type: 'toggle',
 				key: 'ignoreDates',
+			},
+		});
+
+		defs.push({
+			name: 'Match longer definitions over already-linked words',
+			desc: 'When an existing note name inside the middle of a longer definition was already linked (e.g. "[[Security]] Education Training Awareness"), still suggest the whole phrase and absorb the shorter link. Fully-linked names stay skipped.',
+			control: {
+				type: 'toggle',
+				key: 'matchLongerAcrossLinks',
 			},
 		});
 

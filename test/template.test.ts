@@ -139,6 +139,30 @@ test('matches inside code block when ignoreCodeblocks=false', () => {
 	assert.equal(all[0]?.name, 'Fake');
 });
 
+test('skips html-tag lines when ignoreHtml is on', () => {
+	const doc = ['<iframe src="INSERT Cow URL HERE">', '- Real (yes) - is a hit'].join('\n');
+	const all = findAllTemplate(doc, INLINE, { ignoreHtml: true });
+	assert.equal(all.length, 1);
+	assert.equal(all[0]?.name, 'Real');
+});
+
+test('matches html-tag lines by default (ignoreHtml off)', () => {
+	const doc = ['<div><span>Real-Appetite</span></div>'].join('\n');
+	const tpl = '<div>{{Link Name}}</div>';
+	assert.equal(findAllTemplate(doc, tpl).length, 1);
+	assert.equal(findAllTemplate(doc, tpl, { ignoreHtml: true }).length, 0);
+});
+
+test('numbered template matches any list index', () => {
+	const doc = ['1. ExistingConcept', '2. NewConcept - Definition', '4. NewConcept2 - Def2'].join('\n');
+	const all = findAllByTemplates(doc, ['1. {{Link Name}} - {{Link Content}}']);
+	assert.equal(all.length, 2);
+	assert.equal(all[0]?.name, 'NewConcept');
+	assert.equal(all[0]?.content, 'Definition');
+	assert.equal(all[1]?.name, 'NewConcept2');
+	assert.equal(all[1]?.content, 'Def2');
+});
+
 test('table template links first and second columns as name and content', () => {
 	const tpl = '| {{Link Name}} | {{Link Content}} |';
 	const all = findAllByTemplates('| Risk Appetite | Level of risk accepted |', [tpl]);
@@ -276,4 +300,26 @@ test('groupByReference merges variant forms into one note', () => {
 	const acs = groups.find((g) => g[0]?.name.toLowerCase().startsWith('access'));
 	assert.equal(appetite?.length, 2);
 	assert.equal(acs?.length, 1);
+});
+
+test('matchLongerAcrossLinks: partially-linked name matches only when opted in', () => {
+	const doc = '- [[Security]] Education Training Awareness (SETA) - Improve [[Security]] knowledge.';
+	assert.equal(findAllByTemplates(doc, [INLINE]).length, 0);
+	const hits = findAllByTemplates(doc, [INLINE], { matchLongerAcrossLinks: true });
+	assert.equal(hits.length, 1);
+	assert.equal(hits[0]?.name, 'Security Education Training Awareness');
+	assert.equal(hits[0]?.nameStart, 2);
+});
+
+test('matchLongerAcrossLinks: false skips partially-linked name', () => {
+	const doc = '- [[Security]] Education Training Awareness (SETA) - Improve [[Security]] knowledge.';
+	const hits = findAllByTemplates(doc, [INLINE], { matchLongerAcrossLinks: false });
+	assert.equal(hits.length, 0);
+});
+
+test('fully-linked name is always skipped (idempotency)', () => {
+	const doc = '- [[Cow]] - moo';
+	const def = '- {{Link Name}} - {{Link Content}}';
+	assert.equal(findAllByTemplates(doc, [def]).length, 0);
+	assert.equal(findAllByTemplates(doc, [def], { matchLongerAcrossLinks: false }).length, 0);
 });

@@ -2,15 +2,23 @@ import { collectSuggestions, dedupeSuggestions } from "../collectSuggestions.ts"
 import { collectVaultSuggestions } from "../collectVaultSuggestions.ts";
 import { createNote } from "../creator.ts";
 import { resolveTargetFolder } from "../folders.ts";
-import { applyExistingLinks, buildNoteIndex, foldHitTargets } from "../existingLinks.ts";
+import {
+	applyExistingLinks,
+	buildNoteIndex,
+	findExistingHits,
+	foldHitTargets,
+} from "../existingLinks.ts";
 import type { IndexEntry } from "../existingLinks.ts";
 import { applyLinks } from "../link.ts";
 import { variantForms } from "../nlp.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
+import { frontmatterDisabled } from "../validation.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
 import type { IPlugin } from "./ipluginInterface.ts";
+
+const DISABLE_FRONTMATTER_KEY = 'auto-link';
 
 /** Note index over the vault's markdown files, per the existing-match mode. */
 function vaultNoteIndex(plugin: IPlugin): Map<string, string> {
@@ -28,7 +36,14 @@ function scanOpts(plugin: IPlugin) {
 		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 		ignoreDates: plugin.settings.ignoreDates,
 		allowedCodeblocks: plugin.settings.allowedCodeblocks,
+		ignoreHtml: plugin.settings.ignoreHtml,
+		matchLongerAcrossLinks: plugin.settings.matchLongerAcrossLinks,
 	};
+}
+
+/** True when the given doc's frontmatter opts the page out of auto-linking. */
+function disabledFor(doc: string): boolean {
+	return frontmatterDisabled(doc, DISABLE_FRONTMATTER_KEY);
 }
 
 /** Index mapping a selected group's name/alias/variant forms → its name. */
@@ -71,6 +86,7 @@ async function targetFolder(
 /** Rewrite template keyword lines in `plugin`'s doc into wiki links, idempotently. */
 export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 	const doc = plugin.value();
+	if (disabledFor(doc)) return;
 	const hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
 	if (!hits.length) {
 		if (!quiet) plugin.notice('No template matches found.');
@@ -85,6 +101,7 @@ export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 /** Preview suggestions for the active file; applying creates notes + links. */
 export function processFileAndPreview(plugin: IPlugin): void {
 	const doc = plugin.value();
+	if (disabledFor(doc)) return;
 	const folder = plugin.folder();
 	const source = plugin.source();
 	const found: Suggestion[] = [];
@@ -102,6 +119,34 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		if (source) for (const s of nlpFound) s.sources = [source];
 		found.push(...nlpFound);
 	}
+	if (plugin.settings.enableExistingLinks) {
+		const excludeBasename = source.split('/').pop()?.replace(/\.md$/i, '');
+		const hits = findExistingHits(
+			doc,
+			vaultNoteIndex(plugin),
+			{
+				...scanOpts(plugin),
+				capitalize: plugin.settings.capitalize,
+				excludeBasename,
+			},
+		);
+		const byBase = new Map<string, Suggestion>();
+		for (const h of hits) {
+			let s = byBase.get(h.basename);
+			if (!s) {
+				s = { name: h.basename, aliases: [], hits: [], count: 0, existing: true };
+				byBase.set(h.basename, s);
+			}
+			s.hits.push({
+				name: h.surface,
+				target: h.basename,
+				lineIndex: h.lineIndex,
+				nameStart: h.start,
+			});
+			s.count = (s.count ?? 0) + 1;
+		}
+		found.push(...byBase.values());
+	}
 	if (!found.length) {
 		plugin.notice('No keyword matches found.');
 		return;
@@ -118,6 +163,7 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		);
 		const dest = await targetFolder(plugin, folder, {});
 		for (const g of groups) {
+			if (g.existing) continue;
 			try {
 				const res = await createNote(
 					plugin,
@@ -132,7 +178,9 @@ export function processFileAndPreview(plugin: IPlugin): void {
 				plugin.notice(`Auto Link Creator error: ${String(err)}`);
 			}
 		}
-		for (const g of groups) toLink.push(...g.hits);
+		for (const g of groups) {
+			if (!g.existing) toLink.push(...g.hits);
+		}
 		let current = plugin.value();
 		if (toLink.length) {
 			current = applyLinks(current, toLink, plugin.settings.capitalize);
@@ -146,6 +194,7 @@ export function processFileAndPreview(plugin: IPlugin): void {
 			excludeBasename,
 			ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 			allowedCodeblocks: plugin.settings.allowedCodeblocks,
+			ignoreHtml: plugin.settings.ignoreHtml,
 		});
 		if (res.updated !== current) plugin.set(res.updated);
 		const linked = toLink.length + res.count;
@@ -197,6 +246,7 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 			if (targetIdx.size) {
 				for (const file of plugin.markdownFiles()) {
 					const doc = await plugin.read(file.path);
+					if (disabledFor(doc)) continue;
 					const hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
 					if (!hits.length) continue;
 					foldHitTargets(hits, targetIdx);
@@ -221,6 +271,8 @@ export function linkExistingNotes(plugin: IPlugin): void {
 		return;
 	}
 	const source = plugin.source();
+	const doc = plugin.value();
+	if (disabledFor(doc)) return;
 	const excludeBasename = source.split('/').pop()?.replace(/\.md$/i, '');
 	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
 		path: f.path,
@@ -248,6 +300,7 @@ export function linkExistingNotes(plugin: IPlugin): void {
 		excludeBasename,
 		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 		allowedCodeblocks: plugin.settings.allowedCodeblocks,
+		ignoreHtml: plugin.settings.ignoreHtml,
 	});
 	if (!res.count) {
 		plugin.notice('No existing-note matches found.');

@@ -27,24 +27,43 @@ export interface CodeblockFilterOptions {
 	ignoreCodeblocks?: boolean;
 	/** Fenced-block languages (e.g. `mermaid`) to still link inside. */
 	allowedCodeblocks?: string[];
+	/** Skip lines that begin an HTML tag/comment (`<div>`, `<!-- …`). */
+	ignoreHtml?: boolean;
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * True when the leading YAML frontmatter block sets `key` to a falsy value
+ * (`false`, `no`, `off`, `0`). Used to disable auto-linking per note.
+ */
+export function frontmatterDisabled(doc: string, key = 'auto-link'): boolean {
+	const lines = doc.split('\n');
+	const end = frontmatterEnd(lines);
+	if (end === -1) return false;
+	const block = lines.slice(1, end).join('\n');
+	return new RegExp(`^\\s*${escapeRe(key)}\\s*:\\s*(?:false|no|off|0)\\s*$`, 'im').test(block);
 }
 
 /**
- * Build a per-line predicate for fenced code blocks (```) shared by the
- * template and existing-link scanners, so both honor the same allowlist.
- * Returns true when `line` is a fence boundary, or the body of a block kept
- * out by `ignoreCodeblocks`/`allowedCodeblocks`.
+ * Build a per-line predicate for code and HTML blocks shared by the template
+ * and existing-link scanners, so both honor the same allowlist. Returns true
+ * when `line` is a fence boundary, the body of a block kept out by
+ * `ignoreCodeblocks`/`allowedCodeblocks`, or (with `ignoreHtml`) an HTML line
+ * that begins with `<`.
  */
 export function makeCodeblockFilter(
 	opts: CodeblockFilterOptions = {},
 ): (line: string) => boolean {
 	const ignore = opts.ignoreCodeblocks ?? true;
+	const ignoreHtml = opts.ignoreHtml ?? false;
 	const allow = new Set(
 		(opts.allowedCodeblocks ?? []).map((l) => l.trim().toLowerCase()).filter(Boolean),
 	);
 	let inBody = false;
 	let skipBody = false;
 	return (line) => {
+		if (/^\s*</.test(line)) return ignoreHtml;
 		if (!/^```/.test(line)) return inBody && skipBody;
 		const lang = /^```\s*(\S+)/.exec(line)?.[1]?.toLowerCase() ?? '';
 		if (!inBody) {

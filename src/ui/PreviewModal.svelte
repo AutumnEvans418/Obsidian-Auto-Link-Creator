@@ -100,6 +100,9 @@ const excerpt = (content: string): string => {
 				/>
 				<div class="alc-preview-item">
 					<span class="alc-preview-name">{s.name}</span>
+					{#if s.existing}
+						<span class="alc-preview-existing">existing note</span>
+					{/if}
 					{#if s.count}
 						<span class="alc-preview-usage">used {s.count}&times;</span>
 					{/if}
@@ -193,6 +196,12 @@ const excerpt = (content: string): string => {
 	.alc-preview-usage {
 		opacity: 0.55;
 		font-size: 0.85em;
+	}
+	.alc-preview-existing {
+		opacity: 0.6;
+		font-size: 0.85em;
+		font-style: italic;
+		text-transform: uppercase;
 	}
 	.alc-preview-sources,
 	.alc-preview-template,
