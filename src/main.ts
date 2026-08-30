@@ -20,6 +20,7 @@ import {
 	processVaultAndPreview,
 } from './services/commandService.ts';
 import type { IEditorView, IPlugin } from './services/ipluginInterface.ts';
+import { minimalChanges } from './textDiff.ts';
 
 /** Blocking indicator shown while a preview scan runs. */
 class LoadingModal extends Modal {
@@ -124,22 +125,23 @@ export default class AutoLinkCreator extends Plugin {
 			value: () => editor?.getValue() ?? '',
 			set: (content) => {
 				if (!editor) return;
+				const oldDoc = editor.getValue();
+				if (content === oldDoc) return;
+				if (editor.transaction) {
+					// Emit only the lines that changed, not a whole-doc replace:
+					// a full replace collapses the selection and unpins the
+					// viewport, and restores with stale coords can't account
+					// for the characters the link pass inserted before the
+					// caret. A minimal diff lets CodeMirror map the caret by
+					// the inserted delta and hold the scroll position natively.
+					editor.transaction({ changes: minimalChanges(oldDoc, content) });
+					return;
+				}
+				// Fallback: setValue resets cursor + scroll to the top, so
+				// restore both after the layout settles.
 				const scroll = editor.getScrollInfo?.();
 				const cursor = editor.getCursor?.('head');
-				if (editor.transaction && editor.offsetToPos) {
-					editor.transaction({
-						changes: [
-							{
-								from: { line: 0, ch: 0 },
-								to: editor.offsetToPos(editor.getValue().length),
-								text: content,
-							},
-						],
-					});
-				} else {
-					editor.setValue(content);
-				}
-				// Defer restore so Obsidian's post-save layout settles first.
+				editor.setValue(content);
 				window.requestAnimationFrame(() => {
 					if (scroll && editor.scrollTo) editor.scrollTo(scroll.top, scroll.left);
 					if (cursor && editor.setCursor) editor.setCursor(cursor);

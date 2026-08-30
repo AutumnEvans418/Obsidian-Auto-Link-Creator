@@ -30,6 +30,7 @@ kanban-plugin: board
 ## Done
 
 **Complete**
+- [x] Bug: Save after stop typing is not maintaining scroll correctly. Additionally, it loses cursor position. It's probably not accounting for the characters added after the update is made. Fix: `facade.set` no longer re-emits the whole document as a single transaction (which collapsed the caret to the end and unpinned the viewport, then restored stale coords that ignored chars inserted before the caret). New obsidian-free `minimalChanges` (src/textDiff.ts) emits only the changed lines, so CodeMirror maps the caret by the inserted delta and holds scroll natively; `setValue` fallback keeps the rAF restore. #bug
 - [x] Process on save #feature
 - [x] Preview changes #feature
 - [x] Template matching #feature

@@ -7,7 +7,6 @@ export interface IEditorView {
 	getValue(): string;
 	setValue(content: string): void;
 	/** Obsidian Editor only; absent in test fakes. Enables viewport-safe writes. */
-	offsetToPos?(offset: number): { line: number; ch: number };
 	transaction?(tx: {
 		changes?: {
 			from: { line: number; ch: number };
