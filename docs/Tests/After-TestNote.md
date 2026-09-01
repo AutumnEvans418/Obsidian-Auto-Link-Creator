@@ -11,13 +11,13 @@ When you're ready, delete this note and make the vault your own.
 	- Content1
 	- Content2
 
-> should create alias32 link with markdown file [[Test2]].md and content 
+> should create alias32 link with markdown file [[Test2]].md and [[Content]] 
 > - Content1
 > - Content2
 
-- [[Test3]] (alias) - content
-> should be [[Test3]].md with alias link and content:
-> - content
+- [[Test3]] (alias) - [[Content]]
+> should be [[Test3]].md with alias link and [[Content]]:
+> - [[Content]]
 
 - [[Risk Appetite]] - Level of risk accepted.
 - [[Access Control Systems]] ([[Access Control Systems]]|[[Access Control Systems|ACS]]) - Controls who enters.
@@ -89,7 +89,7 @@ ExistingConcept
 > [!tip] In Live Preview, you can right-click a table to add or delete columns and rows. You can also sort and [[ExistingConcept]] them using the context menu.
 
 > [!faq]- Are [[Callouts]] foldable?
-> Yes! In a foldable callout, the contents are hidden when collapsed. [[ExistingConcept]]
+> Yes! In a foldable callout, the [[Content|Contents]] are hidden when collapsed. [[ExistingConcept]]
 ## Diagrams
 
 ```mermaid
@@ -111,5 +111,9 @@ sequenceDiagram
 </tr>
 </table>
 
+
+[[ExistingConcept]]
+
+[[ExistingConcept]]
 
 [[ExistingConcept]]

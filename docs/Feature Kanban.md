@@ -14,6 +14,22 @@ kanban-plugin: board
 
 ## Done
 
+- [x] fix github build https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator/actions #bug. Fix: CI `npm run build` died with rsync `error in file IO (code 11)` — the `sync` script rsync'd `./docs/` to the local-only `../../../Plugin/Link/` mirror, but in CI that parent `Plugin` dir wasn't creatable by bare rsync, so the build aborted. Added `mkdir -p ../../../Plugin/Link` before the rsyncs in the `sync` script (src package.json), letting the mirror be created in the runner. Verified `npm ci` + `npm run build` + `npm run lint` all exit 0 in a clean CI-depth clone.
+
+- [ ] #bug Formatting should not be included in note name and alias suggestions. ie: 
+	```
+	- [ ] name
+	- [x] name
+	1. name
+	**name**
+	~~name~~
+	***name***
+	__name__
+	#name
+	```
+	![[Pasted image 20260830202812.png]]
+- [ ] Option on the preview screen to analyze the entire vault for nlp keywords in the current vault. Takes into account other notes in the vault when recommending keywords in the current note. #feature
+- [x] nlp vault caching #feature. Fix: NLP results for the whole vault are now cached per-file as incremental n-gram counts and persisted to `vault-nlp-cache.json` (debounced 500 ms, flushed on unload), so the vault-context keyword list is computed once per changed file instead of rescanned every time. The cache is keyed by per-file mtime + settings (minWordLen, maxNgram, stopwords); a file only recounts when either changes. The "Vault context" list in the preview modal now lazy-loads in a background scan on first toggle, with a "Scanning vault for keyword context…" placeholder and "No vault-context keywords found." empty state. Applying a vault-context suggestion (listIndex 1) reuses the same cache and links the current note. #feature
 - [x] Option to Match longer definitions even when a link already is in the name [[Typing Fail Example]]. Fix: new "Match longer definitions over already-linked words" setting (default off). When on, a phrase whose first words were already linked (e.g. `- [[Security]] Education Training Awareness (SETA) - …`) is still suggested; applying unwraps the shorter `[[Security]]` and links the whole `[[Security Education Training Awareness]]`. Fully-linked names stay skipped so re-runs stay idempotent.
 - [x] Update auto link preview to include linking existing notes, not just making new ones. Fix: the preview now lists existing-note phrases as "existing note" suggestions (badge + no content); applying them links every occurrence to the existing note without creating or appending to it. Gated by the existing "Link phrases that match existing note names" setting.
 - [x] Ignore html blocks. Fix: new "Ignore html blocks" setting skips lines that begin an HTML tag or comment (raw <div>, <iframe>, <!--), in both template and existing-note scans. Defaults off (current behavior preserved).
@@ -69,8 +85,6 @@ kanban-plugin: board
 - [x] Feature: Update on save should match the longest existing link/file/alias. For example, if the text says "Information Assets" and the following links exist: "Information", "Information Assets", "Information Assets" should be the link that created. Fix: sort tiebreaker in `applyExistingLinks` (`b.end - a.end`) ensures longest match at same start position wins; overlap rejection then drops shorter candidates. #feature
 - [x] Feature: Proximity note wins. #feature
 - [x] Feature: Link unresolved links. #feature
-
-
 
 
 
