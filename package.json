@@ -5,7 +5,7 @@
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
-		"sync": "rsync -rtuv ./docs/ ../../../Plugin/Link/ && rsync -rtuv ../../../Plugin/Link/ ./docs/",
+		"sync": "mkdir -p ../../../Plugin/Link && rsync -rtuv --exclude AGENTS.md ./docs/ ../../../Plugin/Link/ && rsync -rtuv --exclude AGENTS.md ../../../Plugin/Link/ ./docs/ && rsync -rtuv ./AGENTS.md ../../../Plugin/Link/AGENTS.md && rsync -rtuv ../../../Plugin/Link/AGENTS.md ./AGENTS.md",
 		"dev": "npm run sync && node esbuild.config.mjs",
 		"build": "npm run sync && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"test": "node --test",
