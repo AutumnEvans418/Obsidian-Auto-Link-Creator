@@ -235,7 +235,7 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 			plugin.notice(`Created ${created}, appended ${appended}.`);
 		}
 	};
-	plugin.preview(found, apply, secondary);
+	plugin.preview(dedupeSuggestions(found), apply, secondary);
 }
 
 /** Scan every markdown file, preview vault-wide suggestions, apply on select. */
@@ -245,7 +245,7 @@ export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
 		plugin.notice('No keyword matches found in the vault.');
 		return;
 	}
-	plugin.preview(collected, async (indices) => {
+	plugin.preview(dedupeSuggestions(collected), async (indices) => {
 		const onWrite = plugin.undoableWriter();
 		let created = 0;
 		let appended = 0;

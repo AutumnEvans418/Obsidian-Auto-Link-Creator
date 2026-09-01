@@ -10,12 +10,13 @@ kanban-plugin: board
 
 ## Active
 
+- [ ] Remember preview filter selections such that reopening the preview screen pre-selects those options: sort, source, content, vault context #feature
 
 
 ## Done
 
+- [x] Keywords shouldn't be case sensitive. For example, preview shouldn't show "Alias Support" and "Alias support" as separate keywords. #bug Fix: the apply path already deduped by case-insensitive reference, but the preview lists were shown raw — so template suggestions (title-cased) and NLP suggestions (which title-case the most frequent surface form) could both surface the same phrase under different casing as separate rows. `dedupeSuggestions` now runs before `plugin.preview` in both `processFileAndPreview` and `processVaultAndPreview`, so the preview shows each reference once, matching apply behavior.
 - [x] fix github build https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator/actions #bug. Fix: CI `npm run build` died with rsync `error in file IO (code 11)` — the `sync` script rsync'd `./docs/` to the local-only `../../../Plugin/Link/` mirror, but in CI that parent `Plugin` dir wasn't creatable by bare rsync, so the build aborted. Added `mkdir -p ../../../Plugin/Link` before the rsyncs in the `sync` script (src package.json), letting the mirror be created in the runner. Verified `npm ci` + `npm run build` + `npm run lint` all exit 0 in a clean CI-depth clone.
-
 - [ ] #bug Formatting should not be included in note name and alias suggestions. ie: 
 	```
 	- [ ] name

@@ -198,6 +198,21 @@ test('nlp suggestions carry root form and source file', async () => {
 	assert.deepEqual(s?.sources, ['notes/field.md']);
 });
 
+test('preview dedupes case-variant keywords (Alias Support === alias support)', async () => {
+	// Template and NLP both surface the same phrase with different casing; the
+	// preview must show it once, matching apply-time dedupe behavior.
+	const plugin = fakePlugin({
+		doc: '- Alias Support - definition\n\nalias support appears here and again alias support',
+		source: 'notes/daily.md',
+	});
+
+	await processFileAndPreview(plugin);
+
+	const names = plugin.previewSuggestions.map((s) => s.name);
+	const aliasSupport = names.filter((n) => n === 'Alias Support');
+	assert.equal(aliasSupport.length, 1, `expected one "Alias Support", got ${JSON.stringify(names)}`);
+});
+
 test('processFileAndPreview notices when nothing matches', async () => {
 	const plugin = fakePlugin({
 		doc: 'plain text',
