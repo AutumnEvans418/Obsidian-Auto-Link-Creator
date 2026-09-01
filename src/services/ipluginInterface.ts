@@ -3,6 +3,9 @@ import type { NlpOptions } from "../keywords.ts";
 import type { AutoLinkSettings } from "../settingsSchema.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
 
+/** Reports scan progress as (done, total) items processed. */
+export type ProgressCallback = (done: number, total: number) => void;
+
 /** Minimal editor surface (Obsidian's Editor satisfies this). */
 export interface IEditorView {
 	getValue(): string;
@@ -79,7 +82,7 @@ export interface IPlugin {
 	 * for deleted files, and persist the cache. Unchanged files are a cheap
 	 * mtime compare — no read, no re-tokenizing.
 	 */
-	ensureVaultCache(opts: NlpOptions): Promise<void>;
+	ensureVaultCache(opts: NlpOptions, onProgress?: ProgressCallback): Promise<void>;
 	/**
 	 * Vault-context suggestions for the active note from the already-reconciled
 	 * cache. Cheap and synchronous (no vault IO). Returns [] before
@@ -96,6 +99,9 @@ export interface IPlugin {
 	preview(
 		suggestions: Suggestion[],
 		onApply: (indices: number[], listIndex?: number) => Promise<void>,
-		secondary?: { label: string; load: () => Promise<Suggestion[]> },
+		secondary?: {
+			label: string;
+			load: (progress?: ProgressCallback) => Promise<Suggestion[]>;
+		},
 	): void;
 }

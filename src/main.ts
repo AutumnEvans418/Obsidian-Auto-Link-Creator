@@ -19,7 +19,7 @@ import {
 	processFileAndPreview,
 	processVaultAndPreview,
 } from './services/commandService.ts';
-import type { IEditorView, IPlugin } from './services/ipluginInterface.ts';
+import type { IEditorView, IPlugin, ProgressCallback } from './services/ipluginInterface.ts';
 import { minimalChanges } from './textDiff.ts';
 import {
 	applyDocChange,
@@ -34,6 +34,10 @@ import type { NlpOptions } from './keywords.ts';
 
 /** Blocking indicator shown while a preview scan runs. */
 class LoadingModal extends Modal {
+	private bar: HTMLProgressElement | undefined;
+	private text: HTMLDivElement | undefined;
+	private spinner: HTMLDivElement | undefined;
+
 	constructor(
 		app: App,
 		private label: string,
@@ -41,11 +45,23 @@ class LoadingModal extends Modal {
 		super(app);
 	}
 
+	/** Show progress against a known total; falls back to a plain spinner label. */
+	report(done: number, total: number): void {
+		if (!this.bar) {
+			this.spinner?.addClass('alcm-hidden');
+			const bar = this.contentEl.createEl('progress', { cls: 'alcm-progress' });
+			bar.max = total;
+			this.bar = bar;
+		}
+		this.bar.value = done;
+		if (this.text) this.text.setText(`${this.label} (${done}/${total})`);
+	}
+
 	onOpen(): void {
 		this.titleEl.setText('Auto link creator');
-		this.contentEl.createDiv('alcm-loading');
-		const text = this.contentEl.createDiv('alcm-loading-text');
-		text.setText(this.label);
+		this.spinner = this.contentEl.createDiv('alcm-loading');
+		this.text = this.contentEl.createDiv('alcm-loading-text');
+		this.text.setText(this.label);
 	}
 }
 
@@ -128,9 +144,11 @@ export default class AutoLinkCreator extends Plugin {
 	 * (or that's new under these NLP opts) without reading unchanged ones, and
 	 * drop entries for deleted files. Persists after the pass.
 	 */
-	private async ensureVaultCache(opts: NlpOptions): Promise<void> {
+	private async ensureVaultCache(opts: NlpOptions, onProgress?: ProgressCallback): Promise<void> {
 		const files = this.app.vault.getMarkdownFiles();
 		const existing = new Set<string>();
+		let done = 0;
+		const total = files.length;
 		for (const f of files) {
 			existing.add(f.path);
 			const stat = f.stat?.mtime ?? 0;
@@ -138,6 +156,8 @@ export default class AutoLinkCreator extends Plugin {
 				const doc = await this.app.vault.cachedRead(f);
 				applyDocChange(this.vaultCache, f.path, stat, doc, opts);
 			}
+			done++;
+			onProgress?.(done, total);
 		}
 		pruneVaultCache(this.vaultCache, existing);
 		this.scheduleCacheSave();
@@ -155,15 +175,21 @@ export default class AutoLinkCreator extends Plugin {
 	 * Obsidian-backed implementation of the service facade. Everything
 	 * Obsidian-specific lives here; services stay unit-testable.
 	 */
-	/** Show a loading modal for the duration of an async scan. */
-	private async withLoading(label: string, run: () => void | Promise<void>): Promise<void> {
+	/**
+	 * Show a loading modal for the duration of an async scan.
+	 * The closure receives a progress reporter it can drive.
+	 */
+	private async withLoading(
+		label: string,
+		run: (report: ProgressCallback) => void | Promise<void>,
+	): Promise<void> {
 		const loading = new LoadingModal(this.app, label);
 		loading.open();
 		// The scan blocks the thread; yield a frame so the modal paints first.
 		await new Promise<void>((r) =>
 			window.requestAnimationFrame(() => window.setTimeout(r, 0)));
 		try {
-			await run();
+			await run((done, total) => loading.report(done, total));
 		} finally {
 			loading.close();
 		}
@@ -294,7 +320,7 @@ export default class AutoLinkCreator extends Plugin {
 					ed.setValue(content);
 				};
 			},
-			ensureVaultCache: (opts) => this.ensureVaultCache(opts),
+			ensureVaultCache: (opts, onProgress) => this.ensureVaultCache(opts, onProgress),
 			vaultContextSuggestions: (source, doc, opts) =>
 				this.vaultContextSuggestionsFor(source, doc, opts),
 			preview: (suggestions, onApply, secondary) => {
@@ -372,7 +398,7 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'preview-create-notes',
 			name: 'Process current file and preview links',
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo) => {
-			void this.withLoading('Scanning current file…', () =>
+			void this.withLoading('Scanning current file…', (_report) =>
 				processFileAndPreview(this.facade(editor, ctx.file?.path ?? '')));
 		},
 	});
@@ -392,7 +418,7 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'process-whole-vault',
 			name: 'Process whole vault and preview links',
 		callback: () => {
-			void this.withLoading('Scanning vault…', () => processVaultAndPreview(this.facade()));
+			void this.withLoading('Scanning vault…', (report) => processVaultAndPreview(this.facade(), report));
 		},
 		});
 
@@ -432,7 +458,7 @@ export default class AutoLinkCreator extends Plugin {
 					new Notice('Auto link creator: no active Markdown file');
 				return;
 			}
-			void this.withLoading('Scanning current file…', () =>
+			void this.withLoading('Scanning current file…', (_report) =>
 				processFileAndPreview(this.facade(view.editor, view.file?.path ?? '')));
 		});
 

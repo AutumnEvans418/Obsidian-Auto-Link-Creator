@@ -16,7 +16,7 @@ import { nlpSuggestions } from "../nlpSuggestions.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
 import { frontmatterDisabled } from "../validation.ts";
-import type { IPlugin } from "./ipluginInterface.ts";
+import type { IPlugin, ProgressCallback } from "./ipluginInterface.ts";
 
 const DISABLE_FRONTMATTER_KEY = 'auto-link';
 
@@ -171,8 +171,8 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 	const secondary = plugin.settings.enableNlpKeywords
 		? {
 				label: 'Vault context',
-				load: async (): Promise<Suggestion[]> => {
-					await plugin.ensureVaultCache(opts);
+				load: async (progress?: ProgressCallback): Promise<Suggestion[]> => {
+					await plugin.ensureVaultCache(opts, progress);
 					return plugin.vaultContextSuggestions(source, doc, opts);
 				},
 			}
@@ -239,8 +239,11 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 }
 
 /** Scan every markdown file, preview vault-wide suggestions, apply on select. */
-export async function processVaultAndPreview(plugin: IPlugin): Promise<void> {
-	const collected = await collectVaultSuggestions(plugin, plugin.settings);
+export async function processVaultAndPreview(
+	plugin: IPlugin,
+	onProgress?: ProgressCallback,
+): Promise<void> {
+	const collected = await collectVaultSuggestions(plugin, plugin.settings, onProgress);
 	if (!collected.length) {
 		plugin.notice('No keyword matches found in the vault.');
 		return;

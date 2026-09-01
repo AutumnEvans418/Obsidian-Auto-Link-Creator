@@ -1,4 +1,4 @@
-import type { IPlugin } from './services/ipluginInterface.ts';
+import type { IPlugin, ProgressCallback } from './services/ipluginInterface.ts';
 import { closestCommonFolder } from './folders.ts';
 import { extractKeywords, extractKeywordsFromDocs } from './keywords.ts';
 import { rootForm, variantForms } from './nlp.ts';
@@ -28,7 +28,8 @@ function existingNoteResolver(plugin: IPlugin, mode: AutoLinkSettings['existingM
 /** Merge per-file hits into vault-wide suggestions with resolved folders. */
 export async function collectVaultSuggestions(
 	plugin: IPlugin,
-	s: AutoLinkSettings): Promise<Suggestion[]> {
+	s: AutoLinkSettings,
+	onProgress?: ProgressCallback): Promise<Suggestion[]> {
 	const extra = s.extraStopwords.split(',').map((x) => x.trim()).filter(Boolean);
 	// Fold variant references onto existing notes ("Armor Classes" → "Armor Class").
 	const resolveExisting = existingNoteResolver(plugin, s.existingMatchMode);
@@ -58,7 +59,10 @@ export async function collectVaultSuggestions(
 	// phrases that never repeat within one note.
 	const nlpFiles = new Map<string, Set<string>>();
 	const docs: string[] = [];
-	for (const file of plugin.markdownFiles()) {
+	const files = plugin.markdownFiles();
+	const total = files.length;
+	let done = 0;
+	for (const file of files) {
 		const doc = await plugin.read(file.path);
 		docs.push(doc);
 		if (s.enableTemplateKeywords) {
@@ -93,6 +97,8 @@ export async function collectVaultSuggestions(
 				nlpFiles.set(k.name.toLowerCase(), set);
 			}
 		}
+		done++;
+		onProgress?.(done, total);
 	}
 
 	if (s.enableNlpKeywords) {

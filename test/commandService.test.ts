@@ -244,6 +244,25 @@ test('processVaultAndPreview resolves shared folder and links all files', async 
 	assert.match(plugin.notices[0] ?? '', /Created 1, appended 0\. Linked \d+ keyword\(s\)\./);
 });
 
+test('processVaultAndPreview reports progress once per scanned file', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'a/one.md': '- Cow - moo',
+			'a/two.md': '- Cow - moo',
+			'a/three.md': '- Cow - moo',
+		},
+		settings: { enableNlpKeywords: false },
+	});
+	const progress: Array<{ done: number; total: number }> = [];
+
+	await processVaultAndPreview(plugin, (done, total) => progress.push({ done, total }));
+
+	// One report per file, monotonic, ending at the scanned total.
+	assert.equal(progress.length, 3);
+	assert.deepEqual(progress.map((p) => p.done), [1, 2, 3]);
+	assert.ok(progress.every((p) => p.total === 3));
+});
+
 test('preview apply links NLP keyword occurrences in the source doc', async () => {
 	const plugin = fakePlugin({
 		doc: 'The cows grazed. The cows slept.',

@@ -2,6 +2,7 @@
 <script lang="ts">
 import type { Suggestion } from './suggestion';
 import { suggestionKinds } from './suggestion';
+import type { ProgressCallback } from '../services/ipluginInterface';
 import {
 	loadPreviewPrefs,
 	savePreviewPrefs,
@@ -20,7 +21,7 @@ interface Props {
 	/** Show provenance rows (source file/line, template, nlp root). */
 	debug?: boolean;
 	/** Optional alternate list the toolbar can toggle to (e.g. vault-context NLP). */
-	secondary?: { label: string; load: () => Promise<Suggestion[]> };
+	secondary?: { label: string; load: (progress?: ProgressCallback) => Promise<Suggestion[]> };
 }
 
 let { suggestions, onApply, onCancel, debug = false, secondary = undefined }: Props = $props();
@@ -31,6 +32,8 @@ $effect(() => {
 });
 let loadingVault: boolean = $state(false);
 let vaultItems: Suggestion[] = $state([]);
+let vaultDone: number = $state(0);
+let vaultTotal: number = $state(0);
 const items: Suggestion[] = $derived(
 	useVault && secondary ? vaultItems : [...suggestions],
 );
@@ -43,7 +46,10 @@ $effect(() => {
 	if (useVault && secondary && !vaultItems.length && !loadingVault) {
 		loadingVault = true;
 		secondary
-			.load()
+			.load((done, total) => {
+				vaultDone = done;
+				vaultTotal = total;
+			})
 			.then((list) => {
 				vaultItems = list;
 			})
@@ -86,7 +92,12 @@ const excerpt = (content: string): string => {
 
 {#if items.length === 0}
 	{#if loadingVault}
-		<p class="alc-preview-empty">Scanning vault for keyword context…</p>
+		<div class="alc-preview-loading">
+			{#if vaultTotal > 0}
+				<progress class="alc-preview-progress" value={vaultDone} max={vaultTotal}></progress>
+			{/if}
+			<p class="alc-preview-empty">Scanning vault for keyword context</p>
+		</div>
 	{:else if useVault && secondary}
 		<p class="alc-preview-empty">No vault-context keywords found.</p>
 	{:else}
@@ -214,6 +225,15 @@ const excerpt = (content: string): string => {
 	.alc-preview-empty {
 		opacity: 0.7;
 		margin: 0.5em 0;
+	}
+	.alc-preview-loading {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5em;
+		padding: 0.5em 0;
+	}
+	.alc-preview-progress {
+		width: 100%;
 	}
 	.alc-preview-toolbar {
 		display: flex;
