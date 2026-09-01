@@ -2,6 +2,16 @@
 <script lang="ts">
 import type { Suggestion } from './suggestion';
 import { suggestionKinds } from './suggestion';
+import {
+	loadPreviewPrefs,
+	savePreviewPrefs,
+	type PreviewSort,
+	type PreviewFilterMode,
+} from '../previewPrefs';
+
+// Persistent filter state: survives modal reopen (in-memory) and plugin reloads
+// (localStorage). Loaded once per module; mutated + saved on every change.
+let prefs = $state(loadPreviewPrefs(typeof localStorage !== 'undefined' ? localStorage : { getItem: () => null }));
 
 interface Props {
 	suggestions: Suggestion[];
@@ -15,7 +25,10 @@ interface Props {
 
 let { suggestions, onApply, onCancel, debug = false, secondary = undefined }: Props = $props();
 
-let useVault: boolean = $state(false);
+const useVault = $derived(prefs.useVault);
+$effect(() => {
+	if (typeof localStorage !== 'undefined') savePreviewPrefs(localStorage, prefs);
+});
 let loadingVault: boolean = $state(false);
 let vaultItems: Suggestion[] = $state([]);
 const items: Suggestion[] = $derived(
@@ -40,24 +53,21 @@ $effect(() => {
 			});
 	}
 });
-let sortBy: 'usage' | 'name' | 'longest' | 'shortest' = $state('usage');
 let query: string = $state('');
-let filterMode: 'both' | 'template' | 'nlp' = $state('both');
-let onlyContent: boolean = $state(false);
 
 const view = $derived(
 	[...items]
 		.map((s, i) => ({ s, i }))
 		.filter(({ s }) =>
-			filterMode === 'both' || suggestionKinds(s).includes(filterMode),
+			prefs.filterMode === 'both' || suggestionKinds(s).includes(prefs.filterMode),
 		)
-		.filter(({ s }) => !onlyContent || !!s.content)
+		.filter(({ s }) => !prefs.onlyContent || !!s.content)
 		.filter(({ s }) => s.name.toLowerCase().includes(query.trim().toLowerCase()))
 		.sort((a, b) => {
-			if (sortBy === 'usage')
+			if (prefs.sortBy === 'usage')
 				return (b.s.count ?? 0) - (a.s.count ?? 0) || a.s.name.localeCompare(b.s.name);
-			if (sortBy === 'longest') return b.s.name.length - a.s.name.length;
-			if (sortBy === 'shortest') return a.s.name.length - b.s.name.length;
+			if (prefs.sortBy === 'longest') return b.s.name.length - a.s.name.length;
+			if (prefs.sortBy === 'shortest') return a.s.name.length - b.s.name.length;
 			return a.s.name.localeCompare(b.s.name);
 		}),
 );
@@ -86,7 +96,7 @@ const excerpt = (content: string): string => {
 	<div class="alc-preview-toolbar">
 		<label class="alc-sort">
 			Sort
-			<select bind:value={sortBy}>
+			<select bind:value={prefs.sortBy}>
 				<option value="usage">Most used</option>
 				<option value="name">Name A–Z</option>
 				<option value="longest">Longest keyword</option>
@@ -95,19 +105,19 @@ const excerpt = (content: string): string => {
 		</label>
 		<label class="alc-sort">
 			Source
-			<select bind:value={filterMode}>
+			<select bind:value={prefs.filterMode}>
 				<option value="both">Both</option>
 				<option value="template">Template</option>
 				<option value="nlp">NLP</option>
 			</select>
 		</label>
 		<label class="alc-sort">
-			<input type="checkbox" bind:checked={onlyContent} />
+			<input type="checkbox" bind:checked={prefs.onlyContent} />
 			Has content
 		</label>
 		{#if secondary}
 			<label class="alc-sort">
-				<input type="checkbox" bind:checked={useVault} />
+				<input type="checkbox" bind:checked={prefs.useVault} />
 				{secondary.label}
 			</label>
 		{/if}
