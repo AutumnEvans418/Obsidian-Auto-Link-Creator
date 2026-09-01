@@ -19,6 +19,7 @@ function fakePlugin(opts: {
 	unresolved?: string[];
 } = {}) {
 	const files = new Map(Object.entries(opts.files ?? {}));
+	let cache = new Map<string, CachedFile>();
 	const notices: string[] = [];
 	const previews: Array<{
 		suggestions: Suggestion[];
@@ -31,6 +32,7 @@ function fakePlugin(opts: {
 		secondary?: { label: string; load: () => Promise<Suggestion[]> };
 		notices: string[];
 		files: Map<string, string>;
+		cache: Map<string, CachedFile>;
 	} = {
 		value: () => opts.doc ?? '',
 		set: () => {},
@@ -39,11 +41,22 @@ function fakePlugin(opts: {
 		},
 		notices,
 		settings: { ...DEFAULT_SETTINGS, ...opts.settings },
-		ensureVaultCache: async () => {},
+		ensureVaultCache: async () => {
+			// Populate a scratch per-file n-gram cache from the in-memory files,
+			// mirroring the real reconciler's cache build for this opts set.
+			const opts2 = { extraStopwords: plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean) };
+			cache = new Map<string, CachedFile>(
+				[...files.entries()].map(([p, text]) => [
+					p,
+					{ mtime: 0, optsKey: '', ngrams: ngramsFor(text, opts2) },
+				]),
+			);
+		},
+		getVaultCache: () => cache,
 		vaultContextSuggestions: (source, doc, options) => {
 			// No shared cache field; build a scratch cache of every other file
 			// (merged with the live doc, matching real per-file cache semantics).
-			const cache = new Map<string, CachedFile>(
+			const c = new Map<string, CachedFile>(
 				[...files.entries()]
 					.filter(([p]) => p !== source)
 					.map(([p, text]) => [
@@ -51,7 +64,7 @@ function fakePlugin(opts: {
 						{ mtime: 0, optsKey: '', ngrams: ngramsFor(text, options) },
 					]),
 			);
-			return vaultSuggestions(cache, source, doc, options);
+			return vaultSuggestions(c, source, doc, options);
 		},
 		folder: () => 'a',
 		source: () => opts.source ?? '',
@@ -86,6 +99,7 @@ function fakePlugin(opts: {
 		preview: (suggestions, onApply, secondary) =>
 			previews.push({ suggestions, onApply, secondary }),
 		files,
+		cache,
 		get applyPreview() {
 			assert.equal(previews.length, 1, 'expected exactly one preview');
 			return previews[0]!.onApply;
@@ -261,6 +275,43 @@ test('processVaultAndPreview reports progress once per scanned file', async () =
 	assert.equal(progress.length, 3);
 	assert.deepEqual(progress.map((p) => p.done), [1, 2, 3]);
 	assert.ok(progress.every((p) => p.total === 3));
+});
+
+test('vault NLP aggregates cached counts across files without extra reads', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'a/one.md': 'Security is reviewed here. - Template - t',
+			'a/two.md': 'Security is also reviewed here.',
+		},
+		settings: { enableTemplateKeywords: true },
+	});
+	let reads = 0;
+	const origRead = plugin.read.bind(plugin);
+	plugin.read = async (f) => {
+		reads++;
+		return origRead(typeof f === 'string' ? f : f.path);
+	};
+
+	await processVaultAndPreview(plugin);
+
+	// One read per file for the template scan only; NLP aggregates cached counts.
+	assert.equal(reads, 2);
+	const byName = new Map(plugin.previewSuggestions.map((s) => [s.name, s]));
+	const sec = byName.get('Security');
+	assert.ok(sec, 'Security suggested via cached aggregate');
+	assert.ok((sec?.count ?? 0) >= 2, 'count reflects aggregated vault frequency');
+});
+
+test('aborting the vault scan returns without preview or notice', async () => {
+	const plugin = fakePlugin({
+		files: { 'a/one.md': '- Cow - moo' },
+	});
+	const controller = new AbortController();
+	controller.abort();
+
+	await processVaultAndPreview(plugin, undefined, controller.signal);
+
+	assert.deepEqual(plugin.notices, [], 'no notice on cancel');
 });
 
 test('preview apply links NLP keyword occurrences in the source doc', async () => {

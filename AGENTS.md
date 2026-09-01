@@ -5,6 +5,7 @@
 - ALWAYS RUN `npm run sync` before reading/editing anything!
 - ALWAYS RUN `npm run sync` after editing anything!
 - NEVER DELETE FEATURES FORM [[Feature Kanban]], ONLY MOVE!
+- ALWAYS RUN lint after editing!
 ## Repo state (read this first)
 
 - **Code is still sample scaffolding, not the real feature.** `src/main.ts` is the

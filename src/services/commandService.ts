@@ -242,8 +242,11 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 export async function processVaultAndPreview(
 	plugin: IPlugin,
 	onProgress?: ProgressCallback,
+	signal?: AbortSignal,
 ): Promise<void> {
-	const collected = await collectVaultSuggestions(plugin, plugin.settings, onProgress);
+	const collected = await collectVaultSuggestions(plugin, plugin.settings, onProgress, signal);
+	// Cancelled (or nothing found): don't open a preview.
+	if (!collected || signal?.aborted) return;
 	if (!collected.length) {
 		plugin.notice('No keyword matches found in the vault.');
 		return;

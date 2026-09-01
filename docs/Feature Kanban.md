@@ -12,11 +12,14 @@ kanban-plugin: board
 - [ ] Proximity-based linking: link repeated phrases weighted by how close/nearby they occur (borrow automatic-linker's approach). #feature
 - [ ] Prevent linking + Preserve existing links: per-note/file opt-out from linking and guarantee already-linked text is never re-wrapped. #feature
 
+
 ## Active
 
 
 ## Done
 
+- [x] process entire vault is too slow #bug Fix: the vault-wide NLP pass no longer re-tokenizes every file on every run. `collectVaultSuggestions` now reconciles and reads the per-file n-gram cache (`ensureVaultCache`, keyed by mtime+opts) and aggregates the cached counts via new pure `vaultNgramAggregate`/`vaultKeywordHits` (src/vaultNlpCache.ts) — only changed files recount, and template-scan reads are skipped when template keywords are off. Warm reruns are near-instant: NLP becomes an in-memory merge of cached n-grams instead of 2-3× compromise tokenization per document.
+- [x] process entire vault x out button on the preview does not work when it's in process. No way to cancel. Probably should be faster or run in background if too slow. #bug Fix: an `AbortController` is now threaded through `withLoading` → `processVaultAndPreview` → `collectVaultSuggestions` (src/main.ts, src/services/commandService.ts). Closing the scanning modal (X or Esc) aborts the scan via `LoadingModal.onClose`, `collectVaultSuggestions` returns `undefined` early, and no preview/notice is shown. Combined with the cache-driven speedup, the scan is faster and fully cancelable.
 - [x] Add progress bar for preview 
 	- processing entire vault if enabled + keyword finder
 	- processing entire vault when checkbox is checked.

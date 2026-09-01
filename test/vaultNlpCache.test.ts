@@ -6,6 +6,7 @@ import {
 	makeVaultCache,
 	pruneVaultCache,
 	serializeVaultCache,
+	vaultKeywordHits,
 	vaultSuggestions,
 } from '../src/vaultNlpCache.ts';
 
@@ -68,4 +69,16 @@ test('vaultSuggestions filters phrases absent from the current note', () => {
 	for (const x of s) {
 		assert.ok('party here.'.includes(x.name.toLowerCase()), `${x.name} missing from current note`);
 	}
+});
+
+test('vaultKeywordHits aggregates cached counts and tracks per-file membership', () => {
+	const cache = makeVaultCache();
+	applyDocChange(cache, 'a/one.md', 1, 'Cow appears once.');
+	applyDocChange(cache, 'a/two.md', 1, 'Cow again, cow thrice.');
+	const hits = vaultKeywordHits(cache, 2);
+	const cow = hits.find((h) => h.name.toLowerCase() === 'cow');
+	assert.ok(cow, 'cow passes aggregate minFreq');
+	assert.equal(cow?.count, 3, 'count summed across files');
+	assert.deepEqual(cow?.files, new Set(['a/one.md', 'a/two.md']), 'membership from both files');
+	assert.ok(!hits.find((h) => h.name.toLowerCase() === 'appears'), 'sub-threshold phrase dropped');
 });

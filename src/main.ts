@@ -41,6 +41,7 @@ class LoadingModal extends Modal {
 	constructor(
 		app: App,
 		private label: string,
+		private onCloseAbort?: () => void,
 	) {
 		super(app);
 	}
@@ -62,6 +63,11 @@ class LoadingModal extends Modal {
 		this.spinner = this.contentEl.createDiv('alcm-loading');
 		this.text = this.contentEl.createDiv('alcm-loading-text');
 		this.text.setText(this.label);
+	}
+
+	/** Closing the modal (X or Esc) aborts the in-flight scan. */
+	onClose(): void {
+		this.onCloseAbort?.();
 	}
 }
 
@@ -181,16 +187,21 @@ export default class AutoLinkCreator extends Plugin {
 	 */
 	private async withLoading(
 		label: string,
-		run: (report: ProgressCallback) => void | Promise<void>,
+		run: (report: ProgressCallback, signal?: AbortSignal) => void | Promise<void>,
 	): Promise<void> {
-		const loading = new LoadingModal(this.app, label);
+		const controller = new AbortController();
+		let finished = false;
+		const loading = new LoadingModal(this.app, label, () => {
+			if (!finished) controller.abort();
+		});
 		loading.open();
 		// The scan blocks the thread; yield a frame so the modal paints first.
 		await new Promise<void>((r) =>
 			window.requestAnimationFrame(() => window.setTimeout(r, 0)));
 		try {
-			await run((done, total) => loading.report(done, total));
+			await run((done, total) => loading.report(done, total), controller.signal);
 		} finally {
+			finished = true;
 			loading.close();
 		}
 	}
@@ -321,6 +332,7 @@ export default class AutoLinkCreator extends Plugin {
 				};
 			},
 			ensureVaultCache: (opts, onProgress) => this.ensureVaultCache(opts, onProgress),
+			getVaultCache: () => this.vaultCache,
 			vaultContextSuggestions: (source, doc, opts) =>
 				this.vaultContextSuggestionsFor(source, doc, opts),
 			preview: (suggestions, onApply, secondary) => {
@@ -418,7 +430,8 @@ export default class AutoLinkCreator extends Plugin {
 			id: 'process-whole-vault',
 			name: 'Process whole vault and preview links',
 		callback: () => {
-			void this.withLoading('Scanning vault…', (report) => processVaultAndPreview(this.facade(), report));
+			void this.withLoading('Scanning vault…', (report, signal) =>
+				processVaultAndPreview(this.facade(), report, signal));
 		},
 		});
 

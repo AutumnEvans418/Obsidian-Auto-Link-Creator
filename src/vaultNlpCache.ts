@@ -7,7 +7,7 @@ import {
 	type FileNgrams,
 	type NlpOptions,
 } from './keywords.ts';
-import { rootForm } from './nlp.ts';
+import { rootForm, titleCase } from './nlp.ts';
 import type { Suggestion } from './ui/suggestion.ts';
 
 /**
@@ -89,6 +89,62 @@ export function vaultSuggestions(
 			hits: [],
 			nlpRoot: rootForm(k.name.toLowerCase()),
 		}));
+}
+
+export interface VaultKeywordHit {
+	key: string;
+	name: string;
+	aliases: string[];
+	count: number;
+	files: Set<string>;
+}
+
+/**
+ * Aggregate every cached file's n-grams into one bag plus a per-key map of
+ * which files contain that lemmatized phrase. Drives vault-wide NLP without
+ * re-tokenizing unchanged files (the expensive part).
+ */
+export function vaultNgramAggregate(
+	cache: VaultNlpCache,
+): { ngrams: FileNgrams; files: Map<string, Set<string>> } {
+	const ngrams: FileNgrams = new Map();
+	const files: Map<string, Set<string>> = new Map();
+	for (const [path, entry] of cache) {
+		mergeNgrams(ngrams, entry.ngrams);
+		for (const key of entry.ngrams.keys()) {
+			let set = files.get(key);
+			if (!set) {
+				set = new Set<string>();
+				files.set(key, set);
+			}
+			set.add(path);
+		}
+	}
+	return { ngrams, files };
+}
+
+/**
+ * Vault-wide keyword hits from the cache, each carrying the lemmatized key and
+ * the set of files it appears in (for folder resolution), plus the aggregated
+ * count and the most frequent surface form as a title-cased name.
+ */
+export function vaultKeywordHits(cache: VaultNlpCache, minFreq: number): VaultKeywordHit[] {
+	const { ngrams, files } = vaultNgramAggregate(cache);
+	const out: VaultKeywordHit[] = [];
+	for (const [key, g] of ngrams) {
+		if (g.count < minFreq) continue;
+		const lead = [...g.forms.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+		if (!lead) continue;
+		const name = titleCase(lead);
+		out.push({
+			key,
+			name,
+			aliases: [],
+			count: g.count,
+			files: files.get(key) ?? new Set<string>(),
+		});
+	}
+	return out.sort((a, b) => b.count - a.count);
 }
 
 /** Plain-object form for `saveData`. */

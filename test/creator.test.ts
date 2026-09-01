@@ -5,6 +5,7 @@ import { noteBody } from '../src/note.ts';
 import { DEFAULT_SETTINGS } from '../src/settingsSchema.ts';
 import type { AutoLinkSettings } from '../src/settingsSchema.ts';
 import type { IPlugin } from '../src/services/ipluginInterface.ts';
+import { makeVaultCache } from '../src/vaultNlpCache.ts';
 
 /** Minimal in-memory IPlugin for createNote. */
 function fakePlugin(files: Record<string, string> = {}) {
@@ -30,6 +31,7 @@ function fakePlugin(files: Record<string, string> = {}) {
 			store.set(p, data);
 		},
 		ensureVaultCache: async () => {},
+		getVaultCache: () => makeVaultCache(),
 		vaultContextSuggestions: () => [],
 		modify: async (f, data) => {
 			store.set(f.path, data);

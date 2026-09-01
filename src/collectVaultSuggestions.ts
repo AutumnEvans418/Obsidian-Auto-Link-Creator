@@ -1,11 +1,11 @@
 import type { IPlugin, ProgressCallback } from './services/ipluginInterface.ts';
 import { closestCommonFolder } from './folders.ts';
-import { extractKeywords, extractKeywordsFromDocs } from './keywords.ts';
 import { rootForm, variantForms } from './nlp.ts';
 import { buildNoteIndex } from './existingLinks.ts';
 import type { IndexEntry } from './existingLinks.ts';
 import type { AutoLinkSettings } from './settingsSchema.ts';
 import { type ParsedTemplate, groupByReference, findAllByTemplates, groupContent } from './template.ts';
+import { vaultKeywordHits } from './vaultNlpCache.ts';
 import type { Suggestion } from './ui/suggestion.ts';
 
 /** Resolve a name to an existing note whose basename/alias shares a form. */
@@ -29,7 +29,8 @@ function existingNoteResolver(plugin: IPlugin, mode: AutoLinkSettings['existingM
 export async function collectVaultSuggestions(
 	plugin: IPlugin,
 	s: AutoLinkSettings,
-	onProgress?: ProgressCallback): Promise<Suggestion[]> {
+	onProgress?: ProgressCallback,
+	signal?: AbortSignal): Promise<Suggestion[] | undefined> {
 	const extra = s.extraStopwords.split(',').map((x) => x.trim()).filter(Boolean);
 	// Fold variant references onto existing notes ("Armor Classes" → "Armor Class").
 	const resolveExisting = existingNoteResolver(plugin, s.existingMatchMode);
@@ -54,17 +55,19 @@ export async function collectVaultSuggestions(
 			e.name.toLowerCase() === name.toLowerCase() || variantForms(e.name.toLowerCase()).some((f) => variantForms(name.toLowerCase()).includes(f)),
 		);
 
-	// NLP: map every phrase to the files it appears in, using a per-file scan
-	// with minimum frequency 1 so membership is tracked even for cross-file
-	// phrases that never repeat within one note.
-	const nlpFiles = new Map<string, Set<string>>();
-	const docs: string[] = [];
+	// Reconcile the per-file n-gram cache so unchanged files skip recounting,
+	// then aggregate NLP across the whole vault from cached counts instead of
+	// re-tokenizing every document (the dominant cost on warm runs).
+	if (s.enableNlpKeywords) await plugin.ensureVaultCache({ extraStopwords: extra }, onProgress);
+	if (signal?.aborted) return undefined;
+
+	// Template pass: template hits live only per-file, so every file is still
+	// read, but NLP no longer re-tokenizes each one.
 	const files = plugin.markdownFiles();
 	const total = files.length;
 	let done = 0;
 	for (const file of files) {
-		const doc = await plugin.read(file.path);
-		docs.push(doc);
+		const doc = s.enableTemplateKeywords ? await plugin.read(file.path) : '';
 		if (s.enableTemplateKeywords) {
 			for (const group of groupByReference(
 				findAllByTemplates(doc, s.templates, {
@@ -90,22 +93,16 @@ export async function collectVaultSuggestions(
 				if (content && !e.contents.includes(content)) e.contents.push(content);
 			}
 		}
-		if (s.enableNlpKeywords) {
-			for (const k of extractKeywords(doc, { extraStopwords: extra, minFreq: 1 })) {
-				const set = nlpFiles.get(k.name.toLowerCase()) ?? new Set<string>();
-				set.add(file.path);
-				nlpFiles.set(k.name.toLowerCase(), set);
-			}
-		}
 		done++;
 		onProgress?.(done, total);
+		if (signal?.aborted) return undefined;
 	}
 
 	if (s.enableNlpKeywords) {
-		for (const k of extractKeywordsFromDocs(docs, { extraStopwords: extra })) {
+		for (const k of vaultKeywordHits(plugin.getVaultCache(), 2)) {
 			const e = findEntry(k.name) ?? entry(k.name);
 			for (const a of k.aliases) if (a !== e.name) e.aliases.add(a);
-			for (const f of nlpFiles.get(k.name.toLowerCase()) ?? []) e.files.add(f);
+			for (const f of k.files) e.files.add(f);
 			e.count += k.count;
 			e.nlpCount += k.count;
 		}

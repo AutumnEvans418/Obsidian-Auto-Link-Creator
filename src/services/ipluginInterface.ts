@@ -2,6 +2,7 @@ import type { OpenViewState, TFile } from "obsidian";
 import type { NlpOptions } from "../keywords.ts";
 import type { AutoLinkSettings } from "../settingsSchema.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
+import type { VaultNlpCache } from "../vaultNlpCache.ts";
 
 /** Reports scan progress as (done, total) items processed. */
 export type ProgressCallback = (done: number, total: number) => void;
@@ -83,6 +84,12 @@ export interface IPlugin {
 	 * mtime compare — no read, no re-tokenizing.
 	 */
 	ensureVaultCache(opts: NlpOptions, onProgress?: ProgressCallback): Promise<void>;
+	/**
+	 * The reconciled per-file n-gram cache (after {@link ensureVaultCache}).
+	 * Exposed so vault-wide NLP can aggregate cached counts without re-reading
+	 * or re-tokenizing unchanged files.
+	 */
+	getVaultCache(): VaultNlpCache;
 	/**
 	 * Vault-context suggestions for the active note from the already-reconciled
 	 * cache. Cheap and synchronous (no vault IO). Returns [] before
