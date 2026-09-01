@@ -178,14 +178,21 @@ export interface TemplateOptions extends CodeblockFilterOptions {
 /** True when a matched name should be dropped: junk (`--`) or date-like. */
 /**
  * Strip markdown formatting from a captured name so suggestions don't include
- * checkbox markers (`[ ]`, `[x]`), numbered-list prefixes (`1.`), or inline
- * wrapping (`**bold**`, `~~strike~~`, `***bold-italic***`, `__underline__`).
- * Returns the cleaned name and how many leading characters were removed (for
- * `nameStart` adjustment).
+ * checkbox markers (`[ ]`, `[x]`), numbered-list prefixes (`1.`), heading/tag
+ * markers (`#`, `# `), or inline wrapping (`**bold**`, `~~strike~~`,
+ * `***bold-italic***`, `__underline__`). Returns the cleaned name and how many
+ * leading characters were removed (for `nameStart` adjustment).
  */
 function stripFormatting(raw: string): { name: string; offset: number } {
 	let s = raw;
 	let offset = 0;
+
+	// Leading heading/tag marker:  `# Name`, `#Name`, or `## Name`
+	const hash = s.match(/^#+\s*/);
+	if (hash && s.length > hash[0].length) {
+		offset += hash[0].length;
+		s = s.slice(hash[0].length);
+	}
 
 	// Leading task-list checkbox:  `- [ ] Foo` or `- [x] Foo`
 	const chk = s.match(/^\[[ xX]\]\s*/);

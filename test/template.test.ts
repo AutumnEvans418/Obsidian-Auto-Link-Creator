@@ -356,6 +356,23 @@ test('strips underline formatting from name', () => {
 	assert.equal(matchTemplate('- __Security Awareness__', def)?.name, 'Security Awareness');
 });
 
+test('strips heading marker from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- # Security Awareness', def)?.name, 'Security Awareness');
+});
+
+test('strips bare tag marker from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- #SecurityAwareness', def)?.name, 'SecurityAwareness');
+	assert.equal(matchTemplate('- ## Security Awareness', def)?.name, 'Security Awareness');
+});
+
+test('strips heading marker from alias', () => {
+	const def = '- {{Link Name}} ({{Link Alias}})';
+	assert.equal(matchTemplate('- Security (#SA)', def)?.alias, 'SA');
+	assert.equal(matchTemplate('- Security (# SA)', def)?.alias, 'SA');
+});
+
 test('strips formatting from alias', () => {
 	const def = '- {{Link Name}} ({{Link Alias}})';
 	assert.equal(matchTemplate('- Security (**SA**)', def)?.alias, 'SA');

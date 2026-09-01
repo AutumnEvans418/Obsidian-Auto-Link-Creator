@@ -17,7 +17,8 @@ kanban-plugin: board
 
 - [x] Keywords shouldn't be case sensitive. For example, preview shouldn't show "Alias Support" and "Alias support" as separate keywords. #bug Fix: the apply path already deduped by case-insensitive reference, but the preview lists were shown raw — so template suggestions (title-cased) and NLP suggestions (which title-case the most frequent surface form) could both surface the same phrase under different casing as separate rows. `dedupeSuggestions` now runs before `plugin.preview` in both `processFileAndPreview` and `processVaultAndPreview`, so the preview shows each reference once, matching apply behavior.
 - [x] fix github build https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator/actions #bug. Fix: CI `npm run build` died with rsync `error in file IO (code 11)` — the `sync` script rsync'd `./docs/` to the local-only `../../../Plugin/Link/` mirror, but in CI that parent `Plugin` dir wasn't creatable by bare rsync, so the build aborted. Added `mkdir -p ../../../Plugin/Link` before the rsyncs in the `sync` script (src package.json), letting the mirror be created in the runner. Verified `npm ci` + `npm run build` + `npm run lint` all exit 0 in a clean CI-depth clone.
-- [ ] #bug Formatting should not be included in note name and alias suggestions. ie: 
+- [x] #bug Formatting should not be included in note name and alias suggestions. ie: 
+	Fix: `stripFormatting` (src/template.ts) now also strips leading heading/tag markers (`#`, `##`, `#name`) from captured names and aliases, alongside the existing handling for task-list checkboxes (`- [ ]`, `- [x]`), numbered prefixes (`1.`), and inline wrapping (`** *** ~~ __ *`). Applied to both name and alias (and `nameStart` stays correct for splice linking). Covers every case in the list. Tests added in test/template.test.ts.
 	```
 	- [ ] name
 	- [x] name
