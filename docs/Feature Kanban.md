@@ -6,15 +6,22 @@ kanban-plugin: board
 
 ## Todo
 
-
+- [ ] Prevent self-linking: skip suggesting a link when the target note equals the current note (or the phrase already links back to it). #feature
+- [ ] Import/export keywords: export discovered keywords/aliases to a file and re-import them so keyword sets survive vault moves. #feature
+- [ ] Namespace/folder scope: restrict keyword scanning and note creation to a chosen folder (or same-folder only), matching AutoKeywordLinker's scopes. #feature
+- [ ] Proximity-based linking: link repeated phrases weighted by how close/nearby they occur (borrow automatic-linker's approach). #feature
+- [ ] Prevent linking + Preserve existing links: per-note/file opt-out from linking and guarantee already-linked text is never re-wrapped. #feature
 
 ## Active
 
 
 ## Done
 
+- [x] Add progress bar for preview 
+	- processing entire vault if enabled + keyword finder
+	- processing entire vault when checkbox is checked.
+	#feature Fix: progress is threaded two ways. **Whole-vault command**: `collectVaultSuggestions` reports `(done,total)` once per scanned file and `LoadingModal` renders a real `<progress>` bar (`alcm-progress`, replacing its spinner) with a `done/total` count. **Vault-context checkbox** (already-open PreviewModal): the lazy `secondary.load(progress)` closure passes `(done,total)` from `ensureVaultCache`'s per-file cache rebuild into an in-modal `<progress>` under a "Scanning vault for keyword context" line. A shared exported `ProgressCallback = (done,total)=>void` type in `src/services/ipluginInterface.ts` keeps both paths uniform. Unit-tested via `processVaultAndPreview(plugin, cb)` in test/commandService.test.ts.
 - [x] Remember preview filter selections such that reopening the preview screen pre-selects those options: sort, source, content, vault context #feature Fix: preview filter state is now centralized in `src/previewPrefs.ts` and persisted to `localStorage` (key `auto-link-creator.preview-prefs`) with an in-memory mirror, so reopening the modal restores the **Sort**, **Source**, **Has content**, and **Vault context** selections from the previous session. Corrupt/missing entries fall back to defaults; storage write errors are swallowed. Pure parse/save logic is obsidian-free and unit-tested.
-
 - [x] Keywords shouldn't be case sensitive. For example, preview shouldn't show "Alias Support" and "Alias support" as separate keywords. #bug Fix: the apply path already deduped by case-insensitive reference, but the preview lists were shown raw — so template suggestions (title-cased) and NLP suggestions (which title-case the most frequent surface form) could both surface the same phrase under different casing as separate rows. `dedupeSuggestions` now runs before `plugin.preview` in both `processFileAndPreview` and `processVaultAndPreview`, so the preview shows each reference once, matching apply behavior.
 - [x] fix github build https://github.com/AutumnEvans418/Obsidian-Auto-Link-Creator/actions #bug. Fix: CI `npm run build` died with rsync `error in file IO (code 11)` — the `sync` script rsync'd `./docs/` to the local-only `../../../Plugin/Link/` mirror, but in CI that parent `Plugin` dir wasn't creatable by bare rsync, so the build aborted. Added `mkdir -p ../../../Plugin/Link` before the rsyncs in the `sync` script (src package.json), letting the mirror be created in the runner. Verified `npm ci` + `npm run build` + `npm run lint` all exit 0 in a clean CI-depth clone.
 - [x] #bug Formatting should not be included in note name and alias suggestions. ie: 
