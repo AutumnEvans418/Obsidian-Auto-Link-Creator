@@ -1,4 +1,5 @@
 import type { OpenViewState, TFile } from "obsidian";
+import type { NlpOptions } from "../keywords.ts";
 import type { AutoLinkSettings } from "../settingsSchema.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
 
@@ -70,9 +71,31 @@ export interface IPlugin {
 	undoableWriter():
 		| ((path: string, content: string) => Promise<void>)
 		| undefined;
-	/** Show the preview modal; onApply receives selected suggestion indices. */
+
+	// --- vault-context NLP cache ---
+	/**
+	 * Reconcile the plugin's per-file n-gram cache with the vault: recount any
+	 * file whose mtime changed (or that's new under these opts), prune entries
+	 * for deleted files, and persist the cache. Unchanged files are a cheap
+	 * mtime compare — no read, no re-tokenizing.
+	 */
+	ensureVaultCache(opts: NlpOptions): Promise<void>;
+	/**
+	 * Vault-context suggestions for the active note from the already-reconciled
+	 * cache. Cheap and synchronous (no vault IO). Returns [] before
+	 * {@link ensureVaultCache} has run.
+	 */
+	vaultContextSuggestions(currentSource: string, currentDoc: string, opts: NlpOptions): Suggestion[];
+
+	/**
+	 * Show the preview modal; onApply receives selected suggestion indices
+	 * into the shown list (plus `listIndex`, 0 = primary, 1 = secondary).
+	 * `secondary` adds an optional alternate list (e.g. vault-context NLP)
+	 * the modal can toggle between; omit to show only `suggestions`.
+	 */
 	preview(
 		suggestions: Suggestion[],
-		onApply: (indices: number[]) => Promise<void>,
+		onApply: (indices: number[], listIndex?: number) => Promise<void>,
+		secondary?: { label: string; load: () => Promise<Suggestion[]> },
 	): void;
 }

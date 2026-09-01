@@ -5,16 +5,41 @@ import { suggestionKinds } from './suggestion';
 
 interface Props {
 	suggestions: Suggestion[];
-	onApply: (indices: number[]) => void;
+	onApply: (indices: number[], listIndex: number) => void;
 	onCancel: () => void;
 	/** Show provenance rows (source file/line, template, nlp root). */
 	debug?: boolean;
+	/** Optional alternate list the toolbar can toggle to (e.g. vault-context NLP). */
+	secondary?: { label: string; load: () => Promise<Suggestion[]> };
 }
 
-let { suggestions, onApply, onCancel, debug = false }: Props = $props();
+let { suggestions, onApply, onCancel, debug = false, secondary = undefined }: Props = $props();
 
-const items: Suggestion[] = [...suggestions];
-let checked: boolean[] = $state(items.map(() => false));
+let useVault: boolean = $state(false);
+let loadingVault: boolean = $state(false);
+let vaultItems: Suggestion[] = $state([]);
+const items: Suggestion[] = $derived(
+	useVault && secondary ? vaultItems : [...suggestions],
+);
+let checked: boolean[] = $state([]);
+$effect(() => {
+	checked = items.map(() => false);
+});
+// Lazily build the vault-context list the first time the user switches to it.
+$effect(() => {
+	if (useVault && secondary && !vaultItems.length && !loadingVault) {
+		loadingVault = true;
+		secondary
+			.load()
+			.then((list) => {
+				vaultItems = list;
+			})
+			.catch((err) => console.error('Auto Link Creator:', err))
+			.finally(() => {
+				loadingVault = false;
+			});
+	}
+});
 let sortBy: 'usage' | 'name' | 'longest' | 'shortest' = $state('usage');
 let query: string = $state('');
 let filterMode: 'both' | 'template' | 'nlp' = $state('both');
@@ -50,7 +75,13 @@ const excerpt = (content: string): string => {
 <h2 class="alc-preview-title">Create note suggestions</h2>
 
 {#if items.length === 0}
-	<p class="alc-preview-empty">No template matches found in this note.</p>
+	{#if loadingVault}
+		<p class="alc-preview-empty">Scanning vault for keyword context…</p>
+	{:else if useVault && secondary}
+		<p class="alc-preview-empty">No vault-context keywords found.</p>
+	{:else}
+		<p class="alc-preview-empty">No template matches found in this note.</p>
+	{/if}
 {:else}
 	<div class="alc-preview-toolbar">
 		<label class="alc-sort">
@@ -74,6 +105,12 @@ const excerpt = (content: string): string => {
 			<input type="checkbox" bind:checked={onlyContent} />
 			Has content
 		</label>
+		{#if secondary}
+			<label class="alc-sort">
+				<input type="checkbox" bind:checked={useVault} />
+				{secondary.label}
+			</label>
+		{/if}
 		<input
 			class="alc-search"
 			type="search"
@@ -151,7 +188,7 @@ const excerpt = (content: string): string => {
 			const idx = checked
 				.map((on, i) => (on ? i : -1))
 				.filter((i) => i !== -1);
-			onApply(idx);
+			onApply(idx, useVault ? 1 : 0);
 		}}
 		disabled={selectedCount === 0}
 		class="mod-cta"

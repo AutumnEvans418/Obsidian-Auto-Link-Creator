@@ -11,11 +11,11 @@ import {
 import type { IndexEntry } from "../existingLinks.ts";
 import { applyLinks } from "../link.ts";
 import { variantForms } from "../nlp.ts";
+import type { Suggestion } from "../ui/suggestion.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
 import { frontmatterDisabled } from "../validation.ts";
-import type { Suggestion } from "../ui/suggestion.ts";
 import type { IPlugin } from "./ipluginInterface.ts";
 
 const DISABLE_FRONTMATTER_KEY = 'auto-link';
@@ -98,8 +98,22 @@ export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 	plugin.notice(`Linked ${hits.length} keyword(s).`);
 }
 
-/** Preview suggestions for the active file; applying creates notes + links. */
-export function processFileAndPreview(plugin: IPlugin): void {
+/**
+ * NLP options from settings (stop words, phrase length, n-gram width).
+ */
+function nlpOpts(plugin: IPlugin) {
+	const extra = plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
+	return { extraStopwords: extra };
+}
+
+/**
+ * Preview suggestions for the active file; applying creates notes + links.
+ * When NLP is enabled, also offers a vault-context suggestion list the modal
+ * can toggle to. The vault-context list is built lazily (first time the user
+ * switches to it) from a per-file n-gram cache, so opening the modal never
+ * forces a full vault scan.
+ */
+export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 	const doc = plugin.value();
 	if (disabledFor(doc)) return;
 	const folder = plugin.folder();
@@ -114,8 +128,7 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		);
 	}
 	if (plugin.settings.enableNlpKeywords) {
-		const extra = plugin.settings.extraStopwords.split(',').map((s) => s.trim()).filter(Boolean);
-		const nlpFound = nlpSuggestions(doc, extra);
+		const nlpFound = nlpSuggestions(doc, nlpOpts(plugin).extraStopwords);
 		if (source) for (const s of nlpFound) s.sources = [source];
 		found.push(...nlpFound);
 	}
@@ -147,18 +160,36 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		}
 		found.push(...byBase.values());
 	}
-	if (!found.length) {
+	if (!found.length && !plugin.settings.enableNlpKeywords) {
 		plugin.notice('No keyword matches found.');
 		return;
 	}
-	plugin.preview(found, async (indices) => {
+	// The apply path only ever touches the active note, so which list is shown
+	// (note-only vs vault-context) changes only *what* gets created/linked.
+	// The vault-context list is reconciled + read from the cache on demand.
+	const opts = nlpOpts(plugin);
+	const secondary = plugin.settings.enableNlpKeywords
+		? {
+				label: 'Vault context',
+				load: async (): Promise<Suggestion[]> => {
+					await plugin.ensureVaultCache(opts);
+					return plugin.vaultContextSuggestions(source, doc, opts);
+				},
+			}
+		: undefined;
+	const apply = async (indices: number[], listIndex = 0) => {
+		let active = found;
+		if (listIndex === 1 && secondary) {
+			await plugin.ensureVaultCache(opts);
+			active = plugin.vaultContextSuggestions(source, doc, opts);
+		}
 		let created = 0;
 		let appended = 0;
 		const toLink: ParsedTemplate[] = [];
 		const onWrite = plugin.undoableWriter();
 		const groups = dedupeSuggestions(
 			indices
-				.map((i) => found[i])
+				.map((i) => active[i])
 				.filter((s): s is Suggestion => !!s),
 		);
 		const dest = await targetFolder(plugin, folder, {});
@@ -203,7 +234,8 @@ export function processFileAndPreview(plugin: IPlugin): void {
 		} else {
 			plugin.notice(`Created ${created}, appended ${appended}.`);
 		}
-	});
+	};
+	plugin.preview(found, apply, secondary);
 }
 
 /** Scan every markdown file, preview vault-wide suggestions, apply on select. */

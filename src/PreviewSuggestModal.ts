@@ -9,8 +9,9 @@ export class PreviewSuggestModal extends Modal {
 	constructor(
 		app: App,
 		private suggestions: Suggestion[],
-		private onApply: (indices: number[]) => Promise<void>,
+		private onApply: (indices: number[], listIndex?: number) => Promise<void>,
 		private debug = false,
+		private secondary?: { label: string; load: () => Promise<Suggestion[]> },
 	) {
 		super(app);
 	}
@@ -23,8 +24,9 @@ export class PreviewSuggestModal extends Modal {
 			props: {
 				suggestions: this.suggestions,
 				debug: this.debug,
-				onApply: (indices: number[]) => {
-					void this.onApply(indices)
+				secondary: this.secondary,
+				onApply: (indices: number[], listIndex: number) => {
+					void this.onApply(indices, listIndex)
 						.then(() => this.close())
 						.catch((err) => console.error('Auto Link Creator:', err));
 				},

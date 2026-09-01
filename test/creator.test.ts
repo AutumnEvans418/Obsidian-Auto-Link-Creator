@@ -29,6 +29,8 @@ function fakePlugin(files: Record<string, string> = {}) {
 		write: async (p, data) => {
 			store.set(p, data);
 		},
+		ensureVaultCache: async () => {},
+		vaultContextSuggestions: () => [],
 		modify: async (f, data) => {
 			store.set(f.path, data);
 		},

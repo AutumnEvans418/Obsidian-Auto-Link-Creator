@@ -5,6 +5,8 @@ import type { AutoLinkSettings } from '../src/settingsSchema.ts';
 import { linkExistingNotes, linkTemplateKeywords, processFileAndPreview, processVaultAndPreview } from '../src/services/commandService.ts';
 import type { IPlugin } from '../src/services/ipluginInterface.ts';
 import type { Suggestion } from '../src/ui/suggestion.ts';
+import { ngramsFor } from '../src/keywords.ts';
+import { vaultSuggestions, type CachedFile } from '../src/vaultNlpCache.ts';
 
 /** In-memory IPlugin: files map stands in for the vault. */
 function fakePlugin(opts: {
@@ -20,11 +22,13 @@ function fakePlugin(opts: {
 	const notices: string[] = [];
 	const previews: Array<{
 		suggestions: Suggestion[];
-		onApply: (indices: number[]) => Promise<void>;
+		secondary?: { label: string; load: () => Promise<Suggestion[]> };
+		onApply: (indices: number[], listIndex?: number) => Promise<void>;
 	}> = [];
 	const plugin: IPlugin & {
-		applyPreview: (indices: number[]) => Promise<void>;
+		applyPreview: (indices: number[], listIndex?: number) => Promise<void>;
 		previewSuggestions: Suggestion[];
+		secondary?: { label: string; load: () => Promise<Suggestion[]> };
 		notices: string[];
 		files: Map<string, string>;
 	} = {
@@ -35,6 +39,20 @@ function fakePlugin(opts: {
 		},
 		notices,
 		settings: { ...DEFAULT_SETTINGS, ...opts.settings },
+		ensureVaultCache: async () => {},
+		vaultContextSuggestions: (source, doc, options) => {
+			// No shared cache field; build a scratch cache of every other file
+			// (merged with the live doc, matching real per-file cache semantics).
+			const cache = new Map<string, CachedFile>(
+				[...files.entries()]
+					.filter(([p]) => p !== source)
+					.map(([p, text]) => [
+						p,
+						{ mtime: 0, optsKey: '', ngrams: ngramsFor(text, options) },
+					]),
+			);
+			return vaultSuggestions(cache, source, doc, options);
+		},
 		folder: () => 'a',
 		source: () => opts.source ?? '',
 		markdownFiles: () =>
@@ -65,7 +83,8 @@ function fakePlugin(opts: {
 			throw new Error('not implemented in fake');
 		},
 		undoableWriter: () => undefined,
-		preview: (suggestions, onApply) => previews.push({ suggestions, onApply }),
+		preview: (suggestions, onApply, secondary) =>
+			previews.push({ suggestions, onApply, secondary }),
 		files,
 		get applyPreview() {
 			assert.equal(previews.length, 1, 'expected exactly one preview');
@@ -74,6 +93,10 @@ function fakePlugin(opts: {
 		get previewSuggestions() {
 			assert.equal(previews.length, 1, 'expected exactly one preview');
 			return previews[0]!.suggestions;
+		},
+		get secondary() {
+			assert.equal(previews.length, 1, 'expected exactly one preview');
+			return previews[0]!.secondary;
 		},
 	};
 	return plugin;
@@ -146,7 +169,7 @@ test('processFileAndPreview creates note then links source', async () => {
 		setWith = c;
 	};
 
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 
 	const [s] = plugin.previewSuggestions;
 	assert.equal(s?.sources?.[0], 'notes/daily.md:1');
@@ -161,26 +184,26 @@ test('processFileAndPreview creates note then links source', async () => {
 	assert.match(last, /Created 1, appended 0\. Linked 1 keyword\(s\)\./);
 });
 
-test('nlp suggestions carry root form and source file', () => {
+test('nlp suggestions carry root form and source file', async () => {
 	const plugin = fakePlugin({
 		doc: 'The cows grazed. The cows slept.',
 		settings: { enableTemplateKeywords: false },
 		source: 'notes/field.md',
 	});
 
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 
 	const [s] = plugin.previewSuggestions;
 	assert.equal(s?.nlpRoot, 'cow');
 	assert.deepEqual(s?.sources, ['notes/field.md']);
 });
 
-test('processFileAndPreview notices when nothing matches', () => {
+test('processFileAndPreview notices when nothing matches', async () => {
 	const plugin = fakePlugin({
 		doc: 'plain text',
 		settings: { enableNlpKeywords: false },
 	});
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 	assert.deepEqual(plugin.notices, ['No keyword matches found.']);
 });
 
@@ -216,11 +239,48 @@ test('preview apply links NLP keyword occurrences in the source doc', async () =
 		setWith = c;
 	};
 
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 	await plugin.applyPreview([0]);
 
 	assert.ok(plugin.getFileByPath('a/Cows.md'), 'note created');
 	assert.match(setWith, /\[\[Cows\]\]/, 'source doc linked');
+});
+
+test('processFileAndPreview offers a vault-context NLP list to the modal', async () => {
+	const plugin = fakePlugin({
+		source: 'a/note.md',
+		doc: 'Cow is here once.',
+		files: { 'a/other.md': 'Cow appears. Cow again. Cow thrice.' },
+		settings: { enableTemplateKeywords: false },
+	});
+
+	await processFileAndPreview(plugin);
+
+	// Secondary list: vault frequency lifts the once-in-note phrase up.
+	const secondary = await plugin.secondary?.load();
+	assert.ok(secondary?.length, 'secondary vault-context list populated');
+	const v = secondary?.find((s) => s.name.toLowerCase() === 'cow');
+	assert.ok(v, 'cow present via vault context despite single local use');
+	assert.ok((v?.count ?? 0) > 1, 'count reflects vault frequency');
+});
+
+test('applying a vault-context suggestion (listIndex 1) creates and links the note', async () => {
+	const plugin = fakePlugin({
+		source: 'a/note.md',
+		doc: 'Cow is here once.',
+		files: { 'a/other.md': 'Cow appears. Cow again.' },
+		settings: { enableTemplateKeywords: false },
+	});
+	let setWith = '';
+	plugin.set = (c) => {
+		setWith = c;
+	};
+
+	await processFileAndPreview(plugin);
+	await plugin.applyPreview([0], 1);
+
+	assert.ok(plugin.getFileByPath('a/Cow.md'), 'note created from vault-context suggestion');
+	assert.match(setWith, /\[\[Cow\]\]/, 'current note linked');
 });
 
 test('linkTemplateKeywords never touches frontmatter', () => {
@@ -267,7 +327,7 @@ test('new notes go into the configured subfolder', async () => {
 		settings: { enableNlpKeywords: false, newNoteFolder: 'Concepts' },
 	});
 
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 	await plugin.applyPreview([0]);
 
 	assert.ok(plugin.getFileByPath('a/Concepts/Cow.md'), 'note created in subfolder');
@@ -283,7 +343,7 @@ test('closest mode reuses the nearest existing folder walking up', async () => {
 		settings: { enableNlpKeywords: false, newNoteFolder: 'Concepts', newFolderMode: 'closest' },
 	});
 
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 	await plugin.applyPreview([0]);
 
 	assert.ok(plugin.getFileByPath('Concepts/Cow.md'), 'note created in closest match');
@@ -300,7 +360,7 @@ test('closest mode prompts when nothing matches and honors the answer', async ()
 		settings: { enableNlpKeywords: false, newNoteFolder: 'Concepts', newFolderMode: 'closest' },
 	});
 
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 	await plugin.applyPreview([0]);
 
 	assert.equal(promptedWith, 'a/Concepts', 'prompt defaults to subfolder path');
@@ -367,7 +427,7 @@ test('preview includes existing-note suggestions; applying links without creatin
 			existingMatchMode: 'exact',
 		},
 	});
-	processFileAndPreview(plugin);
+	await processFileAndPreview(plugin);
 	const pairs = plugin.previewSuggestions.map((s) => [s.name, s.existing] as const);
 	assert.equal(pairs.length, 2);
 	assert.deepEqual(pairs, [

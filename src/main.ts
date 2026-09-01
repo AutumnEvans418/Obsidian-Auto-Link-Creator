@@ -21,6 +21,16 @@ import {
 } from './services/commandService.ts';
 import type { IEditorView, IPlugin } from './services/ipluginInterface.ts';
 import { minimalChanges } from './textDiff.ts';
+import {
+	applyDocChange,
+	deserializeVaultCache,
+	makeVaultCache,
+	pruneVaultCache,
+	serializeVaultCache,
+	vaultSuggestions,
+	type VaultNlpCache,
+} from './vaultNlpCache.ts';
+import type { NlpOptions } from './keywords.ts';
 
 /** Blocking indicator shown while a preview scan runs. */
 class LoadingModal extends Modal {
@@ -74,6 +84,72 @@ export default class AutoLinkCreator extends Plugin {
 	private originalSaveCallback: ((checking: boolean) => boolean | void) | undefined;
 	private wrappedSaveCallback: ((checking: boolean) => boolean | void) | undefined;
 	private linkTimers: Record<string, number> = {};
+
+	/** Per-file n-gram cache for vault-context NLP (persisted across reloads). */
+	private vaultCache: VaultNlpCache = makeVaultCache();
+	private cacheSaveTimer: number | undefined;
+
+	/** Adapter file storing the vault n-gram cache (kept out of settings data). */
+	private cachePath(): string {
+		const dir = this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+		return `${dir}/vault-nlp-cache.json`;
+	}
+
+	private async loadVaultCache(): Promise<void> {
+		try {
+			const raw = await this.app.vault.adapter.read(this.cachePath());
+			const data = JSON.parse(raw) as Parameters<typeof deserializeVaultCache>[0];
+			this.vaultCache = deserializeVaultCache(data);
+		} catch {
+			this.vaultCache = makeVaultCache();
+		}
+	}
+
+	/** Debounced persist of the cache to its adapter file. */
+	private scheduleCacheSave(): void {
+		if (this.cacheSaveTimer !== undefined) window.clearTimeout(this.cacheSaveTimer);
+		this.cacheSaveTimer = window.setTimeout(() => {
+			this.cacheSaveTimer = undefined;
+			void this.saveVaultCache();
+		}, 500);
+	}
+
+	private async saveVaultCache(): Promise<void> {
+		try {
+			const raw = JSON.stringify(serializeVaultCache(this.vaultCache));
+			await this.app.vault.adapter.write(this.cachePath(), raw);
+		} catch {
+			// Cache is a best-effort speedup; a failed persist is non-fatal.
+		}
+	}
+
+	/**
+	 * Reconcile the cache with the vault: recount any file whose mtime changed
+	 * (or that's new under these NLP opts) without reading unchanged ones, and
+	 * drop entries for deleted files. Persists after the pass.
+	 */
+	private async ensureVaultCache(opts: NlpOptions): Promise<void> {
+		const files = this.app.vault.getMarkdownFiles();
+		const existing = new Set<string>();
+		for (const f of files) {
+			existing.add(f.path);
+			const stat = f.stat?.mtime ?? 0;
+			if (stat > 0) {
+				const doc = await this.app.vault.cachedRead(f);
+				applyDocChange(this.vaultCache, f.path, stat, doc, opts);
+			}
+		}
+		pruneVaultCache(this.vaultCache, existing);
+		this.scheduleCacheSave();
+	}
+
+	private vaultContextSuggestionsFor(
+		source: string,
+		doc: string,
+		opts: NlpOptions,
+	): import('./ui/suggestion.ts').Suggestion[] {
+		return vaultSuggestions(this.vaultCache, source, doc, opts);
+	}
 
 	/**
 	 * Obsidian-backed implementation of the service facade. Everything
@@ -218,14 +294,18 @@ export default class AutoLinkCreator extends Plugin {
 					ed.setValue(content);
 				};
 			},
-			preview: (suggestions, onApply) => {
-				new PreviewSuggestModal(app, suggestions, onApply, readSettings().debug).open();
+			ensureVaultCache: (opts) => this.ensureVaultCache(opts),
+			vaultContextSuggestions: (source, doc, opts) =>
+				this.vaultContextSuggestionsFor(source, doc, opts),
+			preview: (suggestions, onApply, secondary) => {
+				new PreviewSuggestModal(app, suggestions, onApply, readSettings().debug, secondary).open();
 			},
 		};
 	}
 
 	async onload() {
 		await this.loadSettings();
+		await this.loadVaultCache();
 
 		// Format-on-save: wrap the built-in save command so linked template
 		// keywords are converted right after a save. Mirrors kdnk/obsidian-
@@ -363,6 +443,11 @@ export default class AutoLinkCreator extends Plugin {
 	onunload() {
 		for (const id of Object.values(this.linkTimers)) window.clearTimeout(id);
 		this.linkTimers = {};
+		if (this.cacheSaveTimer !== undefined) {
+			window.clearTimeout(this.cacheSaveTimer);
+			this.cacheSaveTimer = undefined;
+			void this.saveVaultCache();
+		}
 		if (this.originalSaveCallback) {
 			const saveDef = this.app.commands?.commands?.['editor:save-file'];
 			if (saveDef && saveDef.checkCallback === this.wrappedSaveCallback) {
