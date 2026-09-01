@@ -176,6 +176,44 @@ export interface TemplateOptions extends CodeblockFilterOptions {
 }
 
 /** True when a matched name should be dropped: junk (`--`) or date-like. */
+/**
+ * Strip markdown formatting from a captured name so suggestions don't include
+ * checkbox markers (`[ ]`, `[x]`), numbered-list prefixes (`1.`), or inline
+ * wrapping (`**bold**`, `~~strike~~`, `***bold-italic***`, `__underline__`).
+ * Returns the cleaned name and how many leading characters were removed (for
+ * `nameStart` adjustment).
+ */
+function stripFormatting(raw: string): { name: string; offset: number } {
+	let s = raw;
+	let offset = 0;
+
+	// Leading task-list checkbox:  `- [ ] Foo` or `- [x] Foo`
+	const chk = s.match(/^\[[ xX]\]\s*/);
+	if (chk) {
+		offset += chk[0].length;
+		s = s.slice(chk[0].length);
+	}
+
+	// Leading numbered-list marker:  `1. Foo`
+	const num = s.match(/^\d+\.\s*/);
+	if (num) {
+		offset += num[0].length;
+		s = s.slice(num[0].length);
+	}
+
+	// Inline formatting wrapping the entire name (longest opener first)
+	const pairs = ['***', '**', '__', '~~', '*'] as const;
+	for (const op of pairs) {
+		if (s.startsWith(op) && s.endsWith(op) && s.length > op.length * 2) {
+			s = s.slice(op.length, -op.length);
+			offset += op.length;
+			break;
+		}
+	}
+
+	return { name: s.trim(), offset };
+}
+
 function rejectedName(name: string, opts: TemplateOptions): boolean {
 	const ignoreDates = opts.ignoreDates ?? true;
 	// Punctuation-only junk ("--") is never a link name; numeric/date-like
@@ -404,9 +442,12 @@ function parseAt(
 	// the captured text so the stored name equals the plain phrase applyLinks
 	// will finally wrap (e.g. `[[Security]] Education…` → `Security Education…`).
 	let { name, nameStart } = unwrapName(line, captured, capturedStart, spans);
+	const fmt = stripFormatting(name);
+	name = fmt.name;
+	nameStart += fmt.offset;
 	const out: ParsedTemplate = { name, nameStart, lineIndex: i };
 	const aliasCaptured = c.fields.includes('alias') ? m[2] : undefined;
-	if (aliasCaptured) out.alias = aliasCaptured.trim();
+	if (aliasCaptured) out.alias = stripFormatting(aliasCaptured.trim()).name;
 	let childCount = 0;
 	if (c.hasContent) {
 		const ci = c.fields.indexOf('content');

@@ -323,3 +323,55 @@ test('fully-linked name is always skipped (idempotency)', () => {
 	assert.equal(findAllByTemplates(doc, [def]).length, 0);
 	assert.equal(findAllByTemplates(doc, [def], { matchLongerAcrossLinks: false }).length, 0);
 });
+
+test('strips task-list checkbox from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- [ ] Security Awareness', def)?.name, 'Security Awareness');
+	assert.equal(matchTemplate('- [x] Security Awareness', def)?.name, 'Security Awareness');
+	assert.equal(matchTemplate('- [X] Security Awareness', def)?.name, 'Security Awareness');
+});
+
+test('strips numbered-list marker from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- 1. Security Awareness', def)?.name, 'Security Awareness');
+});
+
+test('strips bold formatting from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- **Security Awareness**', def)?.name, 'Security Awareness');
+});
+
+test('strips strikethrough formatting from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- ~~Security Awareness~~', def)?.name, 'Security Awareness');
+});
+
+test('strips bold-italic formatting from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- ***Security Awareness***', def)?.name, 'Security Awareness');
+});
+
+test('strips underline formatting from name', () => {
+	const def = '- {{Link Name}}';
+	assert.equal(matchTemplate('- __Security Awareness__', def)?.name, 'Security Awareness');
+});
+
+test('strips formatting from alias', () => {
+	const def = '- {{Link Name}} ({{Link Alias}})';
+	assert.equal(matchTemplate('- Security (**SA**)', def)?.alias, 'SA');
+	assert.equal(matchTemplate('- Security (~~SA~~)', def)?.alias, 'SA');
+});
+
+test('strips task-list checkbox and keeps nameStart correct', () => {
+	const def = '- {{Link Name}}';
+	const r = matchTemplate('- [ ] Security Awareness', def);
+	assert.equal(r?.name, 'Security Awareness');
+	assert.equal(r?.nameStart, 6);
+});
+
+test('strips bold formatting and adjusts nameStart', () => {
+	const def = '- {{Link Name}}';
+	const r = matchTemplate('- **Security Awareness**', def);
+	assert.equal(r?.name, 'Security Awareness');
+	assert.equal(r?.nameStart, 4);
+});
