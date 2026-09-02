@@ -18,6 +18,8 @@ import {
 	linkTemplateKeywords,
 	processFileAndPreview,
 	processVaultAndPreview,
+	exportKeywordFile,
+	importKeywordFile,
 } from './services/commandService.ts';
 import type { IEditorView, IPlugin, ProgressCallback } from './services/ipluginInterface.ts';
 import { minimalChanges } from './textDiff.ts';
@@ -433,6 +435,27 @@ export default class AutoLinkCreator extends Plugin {
 			void this.withLoading('Scanning vault…', (report, signal) =>
 				processVaultAndPreview(this.facade(), report, signal));
 		},
+		});
+
+		// Export discovered keywords (names/aliases/content) to a JSON file so
+		// the keyword set survives a vault move; import restores them as notes.
+		const keywordsFile = () => 'auto-link-keywords.json';
+		this.addCommand({
+			id: 'export-keywords',
+			name: 'Export keywords to file',
+			callback: () => {
+				void this.withLoading('Exporting keywords…', (report, signal) =>
+					exportKeywordFile(this.facade(), keywordsFile(), report, signal));
+			},
+		});
+		this.addCommand({
+			id: 'import-keywords',
+			name: 'Import keywords from file',
+			callback: () => {
+				void this.withLoading('Importing keywords…', async (_report) => {
+					await importKeywordFile(this.facade(), keywordsFile());
+				});
+			},
 		});
 
 		// Temp debug command: exercise the open-for-undo path. Appends a marker

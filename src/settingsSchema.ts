@@ -44,7 +44,13 @@ export interface AutoLinkSettings {
 	newNoteFolder: string;
 	/** How `newNoteFolder` resolves: create a subfolder, or reuse the closest existing one. */
 	newFolderMode: 'subfolder' | 'closest';
+	/** Restrict keyword scanning + note creation to a namespace/folder. */
+	scope: ScopeMode;
+	/** Folder path when `scope` is 'folder' (and its subfolders). */
+	scopeFolder: string;
 }
+
+export type ScopeMode = 'vault' | 'folder' | 'same';
 
 export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	templates: [
@@ -75,4 +81,6 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	linkUnresolved: true,
 	newNoteFolder: '',
 	newFolderMode: 'subfolder',
+	scope: 'vault',
+	scopeFolder: '',
 };

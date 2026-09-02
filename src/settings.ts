@@ -21,9 +21,6 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		this.containerEl.empty();
-	}
 
 	getSettingDefinitions(): SettingDefinitionItem[] {
 		const plugin = this.plugin;
@@ -236,6 +233,38 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 					closest: 'Closest shared folder',
 				},
 			},
+		});
+
+		defs.push({ name: 'Namespace scope', heading: 'Namespace scope' });
+
+		defs.push({
+			name: 'Scope',
+			desc: 'Restrict keyword scanning and note creation. Vault-wide: whole vault. Same folder: only the active note\u2019s folder. Folder: a chosen folder and its subfolders.',
+			control: {
+				type: 'dropdown',
+				key: 'scope',
+				options: {
+					vault: 'Vault-wide',
+					same: 'Same folder only',
+					folder: 'Specific folder',
+				},
+			},
+		});
+
+		defs.push({
+			name: 'Scope folder',
+			desc: 'Folder (and its subfolders) that keyword scanning and note creation are restricted to when Scope is "Specific folder".',
+			render: (setting: Setting) => {
+				setting.addText((text) =>
+					text
+						.setValue(plugin.settings.scopeFolder)
+						.onChange(async (value) => {
+							plugin.settings.scopeFolder = value;
+							await plugin.saveSettings();
+						}),
+				);
+			},
+			visible: () => plugin.settings.scope === 'folder',
 		});
 
 		defs.push({ name: 'Existing notes', heading: 'Existing notes' });

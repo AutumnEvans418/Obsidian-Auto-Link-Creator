@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS } from '../src/settingsSchema.ts';
 import type { AutoLinkSettings } from '../src/settingsSchema.ts';
-import { linkExistingNotes, linkTemplateKeywords, processFileAndPreview, processVaultAndPreview } from '../src/services/commandService.ts';
+import { linkExistingNotes, linkTemplateKeywords, processFileAndPreview, processVaultAndPreview, exportKeywordFile, importKeywordFile } from '../src/services/commandService.ts';
 import type { IPlugin } from '../src/services/ipluginInterface.ts';
 import type { Suggestion } from '../src/ui/suggestion.ts';
 import { ngramsFor } from '../src/keywords.ts';
@@ -236,6 +236,24 @@ test('processFileAndPreview notices when nothing matches', async () => {
 	assert.deepEqual(plugin.notices, ['No keyword matches found.']);
 });
 
+test('preview ranks clustered occurrences above scattered ones', async () => {
+	// Cow's three template occurrences sit on adjacent lines (clustered); Pig's
+	// three are spread widely. Both are kept, but the preview leads with Cow.
+	const plugin = fakePlugin({
+		doc: '- Cow - moo\n- Cow - moo\n- Cow - moo\n- Pig - oink\n\n\n\n\n\n\n\n\n- Pig - oink\n\n\n\n- Pig - oink',
+		settings: { enableNlpKeywords: false },
+		source: 'notes/daily.md',
+	});
+
+	await processFileAndPreview(plugin);
+
+	const names = plugin.previewSuggestions.map((s) => s.name).filter((n) => n === 'Cow' || n === 'Pig');
+	const cow = names.indexOf('Cow');
+	const pig = names.indexOf('Pig');
+	assert.ok(cow >= 0 && pig >= 0, `expected both phrases, got ${JSON.stringify(names)}`);
+	assert.ok(cow < pig, `clustered "Cow" should rank above scattered "Pig", got ${JSON.stringify(names)}`);
+});
+
 test('processVaultAndPreview resolves shared folder and links all files', async () => {
 	const plugin = fakePlugin({
 		files: {
@@ -313,6 +331,62 @@ test('aborting the vault scan returns without preview or notice', async () => {
 
 	assert.deepEqual(plugin.notices, [], 'no notice on cancel');
 });
+
+test('folder scope restricts vault scanning and note creation', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'Projects/A.md': '- Cow - moo',
+			'Other/B.md': '- Cow - moo',
+		},
+		settings: { scope: 'folder', scopeFolder: 'Projects', enableNlpKeywords: false },
+	});
+
+	await processVaultAndPreview(plugin);
+
+	const cow = plugin.previewSuggestions.find((s) => s.name === 'Cow');
+	assert.ok(cow, 'Cow discovered inside scope');
+	assert.deepEqual(cow?.sources, ['Projects/A.md'], 'only in-scope file contributes');
+	await plugin.applyPreview([plugin.previewSuggestions.indexOf(cow!)]);
+	assert.match(await plugin.read('Projects/Cow.md'), /moo/, 'note created inside scope folder');
+	assert.match(await plugin.read('Projects/A.md'), /\[\[Cow\]\]/, 'in-scope file linked');
+	assert.equal(await plugin.read('Other/B.md'), '- Cow - moo', 'out-of-scope file untouched');
+});
+
+test('frontmatter namespace overrides the note creation folder', async () => {
+	const plugin = fakePlugin({
+		doc: '---\nnamespace: proj\n---\n\n- Cow - moo',
+		source: 'notes/daily.md',
+		settings: { enableNlpKeywords: false },
+	});
+	let setWith = '';
+	plugin.set = (c) => {
+		setWith = c;
+	};
+
+	await processFileAndPreview(plugin);
+	await plugin.applyPreview([0]);
+
+	assert.match(await plugin.read('proj/Cow.md'), /moo/, 'note created inside the frontmatter namespace');
+	assert.match(setWith, /\[\[Cow\]\]/, 'keyword linked in the source doc');
+});
+
+test('same-folder scope only scans the source folder', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'a/one.md': '- Cow - moo',
+			'b/two.md': '- Cow - moo',
+		},
+		settings: { scope: 'same', enableNlpKeywords: false },
+	});
+
+	await processVaultAndPreview(plugin);
+
+	// fake folder() === 'a', so only a/one.md is in scope.
+	const cow = plugin.previewSuggestions.find((s) => s.name === 'Cow');
+	assert.ok(cow, 'Cow discovered in the active folder');
+	assert.deepEqual(cow?.sources, ['a/one.md']);
+});
+
 
 test('preview apply links NLP keyword occurrences in the source doc', async () => {
 	const plugin = fakePlugin({
@@ -523,4 +597,104 @@ test('preview includes existing-note suggestions; applying links without creatin
 	assert.equal(plugin.files.size, 2, 'no new note created');
 	assert.equal(plugin.files.get('Cow.md'), 'existing content');
 	assert.equal(plugin.notices.at(-1), 'Created 0, appended 0. Linked 1 keyword(s).');
+});
+
+test('linkTemplateKeywords skips a template line for the note itself (self-link)', () => {
+	const plugin = fakePlugin({
+		doc: '- Cow - moo',
+		source: 'notes/Cow.md',
+	});
+	let setWith = '';
+	plugin.set = (c) => { setWith = c; };
+
+	linkTemplateKeywords(plugin);
+
+	assert.equal(setWith, '', 'self-link line not rendered');
+	assert.deepEqual(plugin.notices, ['No template matches found.']);
+});
+
+test('processFileAndPreview drops a suggestion for the current note', async () => {
+	const plugin = fakePlugin({
+		doc: '- Cow - moo',
+		source: 'notes/Cow.md',
+		settings: { enableNlpKeywords: false },
+	});
+	await processFileAndPreview(plugin);
+	assert.deepEqual(plugin.notices, ['No keyword matches found.']);
+});
+
+test('processFileAndPreview filters self-note from vault-context list', async () => {
+	const plugin = fakePlugin({
+		source: 'a/Cow.md',
+		doc: 'Cow appears once here.',
+		files: { 'a/other.md': 'Cow appears. Cow again. Cow thrice.' },
+		settings: { enableTemplateKeywords: false },
+	});
+	await processFileAndPreview(plugin);
+	const secondary = await plugin.secondary?.load();
+	assert.ok(secondary, 'secondary list loaded');
+	assert.ok(!secondary?.some((s) => s.name.toLowerCase() === 'cow'), 'cow filtered from vault-context');
+});
+
+test('processVaultAndPreview does not link a note into its own file', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'a/Cow.md': '- Cow - moo',
+			'a/two.md': '- Cow - moo',
+		},
+		settings: { enableNlpKeywords: false },
+	});
+	await processVaultAndPreview(plugin);
+	// The vault-wide suggestion is legit (two.md needs it)…
+	assert.ok(plugin.previewSuggestions.some((s) => s.name === 'Cow'), 'Cow still suggested vault-wide');
+	await plugin.applyPreview([0]);
+	// …but applying must not turn Cow.md's own line into a self-[[Cow]] link.
+	assert.match(await plugin.read('a/Cow.md'), /^- Cow - moo$/m, 'Cow.md line stays self-reference-free');
+	assert.doesNotMatch(await plugin.read('a/Cow.md'), /\[\[Cow\]\]/, 'no self-link inside Cow.md');
+	assert.match(await plugin.read('a/two.md'), /\[\[Cow\]\]/, 'other file linked');
+});
+
+test('exportKeywordFile writes JSON with template, NLP, and existing-note keywords', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'a/one.md': '- Cow - moo',
+			'Cow.md': 'existing note',
+		},
+		settings: { enableNlpKeywords: false },
+	});
+	await exportKeywordFile(plugin, 'kw.json');
+	const raw = await plugin.read('kw.json');
+	const data = JSON.parse(raw) as { version: number; keywords: Array<{ name: string; aliases: string[]; content?: string }> };
+	assert.equal(data.version, 1);
+	assert.ok(data.keywords.length >= 2, 'Cow suggestion + Cow note both exported');
+	const cow = data.keywords.filter((k) => k.name === 'Cow');
+	assert.ok(cow.length >= 1, 'Cow present');
+});
+
+test('importKeywordFile creates notes for each exported keyword record', async () => {
+	const plugin = fakePlugin({
+		files: {
+			'kw.json': JSON.stringify({
+				version: 1,
+				keywords: [
+					{ name: 'Cow', aliases: ['cows'], content: 'moo' },
+					{ name: 'Pig', aliases: [], content: 'oink' },
+				],
+			}),
+		},
+		settings: { enableNlpKeywords: false },
+	});
+	const n = await importKeywordFile(plugin, 'kw.json');
+	assert.equal(n, 2);
+	assert.ok(plugin.getFileByPath('Cow.md'), 'Cow.md created');
+	assert.ok(plugin.getFileByPath('Pig.md'), 'Pig.md created');
+	assert.match(await plugin.read('Cow.md'), /moo/);
+	assert.match(plugin.notices.at(-1) ?? '', /created 2/);
+});
+
+test('importKeywordFile reports a parse error and creates nothing', async () => {
+	const plugin = fakePlugin({ files: { 'kw.json': 'not json {' } });
+	const n = await importKeywordFile(plugin, 'kw.json');
+	assert.equal(n, 0);
+	assert.match(plugin.notices.at(-1) ?? '', /Invalid JSON/);
 });

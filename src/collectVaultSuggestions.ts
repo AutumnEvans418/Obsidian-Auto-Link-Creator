@@ -7,14 +7,18 @@ import type { AutoLinkSettings } from './settingsSchema.ts';
 import { type ParsedTemplate, groupByReference, findAllByTemplates, groupContent } from './template.ts';
 import { vaultKeywordHits } from './vaultNlpCache.ts';
 import type { Suggestion } from './ui/suggestion.ts';
+import { inScope } from './scope.ts';
 
 /** Resolve a name to an existing note whose basename/alias shares a form. */
-function existingNoteResolver(plugin: IPlugin, mode: AutoLinkSettings['existingMatchMode']) {
-	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
-		path: f.path,
-		basename: f.basename,
-		aliases: plugin.noteAliases(f.path),
-	}));
+function existingNoteResolver(plugin: IPlugin, mode: AutoLinkSettings['existingMatchMode'], sourceFolder?: string) {
+	const s = plugin.settings;
+	const entries: IndexEntry[] = plugin.markdownFiles()
+		.filter((f) => inScope(f.path, s, sourceFolder))
+		.map((f) => ({
+			path: f.path,
+			basename: f.basename,
+			aliases: plugin.noteAliases(f.path),
+		}));
 	const idx = buildNoteIndex(entries, mode);
 	return (name: string): string | undefined => {
 		for (const form of [name.toLowerCase(), ...variantForms(name.toLowerCase())]) {
@@ -32,8 +36,10 @@ export async function collectVaultSuggestions(
 	onProgress?: ProgressCallback,
 	signal?: AbortSignal): Promise<Suggestion[] | undefined> {
 	const extra = s.extraStopwords.split(',').map((x) => x.trim()).filter(Boolean);
+	// Namespace scope: only scanner/index files inside the scope participate.
+	const sourceFolder = plugin.folder();
 	// Fold variant references onto existing notes ("Armor Classes" → "Armor Class").
-	const resolveExisting = existingNoteResolver(plugin, s.existingMatchMode);
+	const resolveExisting = existingNoteResolver(plugin, s.existingMatchMode, sourceFolder);
 	interface Acc {
 		name: string;
 		aliases: Set<string>;
@@ -63,7 +69,7 @@ export async function collectVaultSuggestions(
 
 	// Template pass: template hits live only per-file, so every file is still
 	// read, but NLP no longer re-tokenizes each one.
-	const files = plugin.markdownFiles();
+	const files = plugin.markdownFiles().filter((f) => inScope(f.path, s, sourceFolder));
 	const total = files.length;
 	let done = 0;
 	for (const file of files) {
@@ -100,9 +106,11 @@ export async function collectVaultSuggestions(
 
 	if (s.enableNlpKeywords) {
 		for (const k of vaultKeywordHits(plugin.getVaultCache(), 2)) {
+			const scoped = [...k.files].filter((f) => inScope(f, s, sourceFolder));
+			if (!scoped.length) continue;
 			const e = findEntry(k.name) ?? entry(k.name);
 			for (const a of k.aliases) if (a !== e.name) e.aliases.add(a);
-			for (const f of k.files) e.files.add(f);
+			for (const f of scoped) e.files.add(f);
 			e.count += k.count;
 			e.nlpCount += k.count;
 		}

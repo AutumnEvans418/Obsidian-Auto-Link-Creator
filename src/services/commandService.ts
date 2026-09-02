@@ -12,7 +12,11 @@ import type { IndexEntry } from "../existingLinks.ts";
 import { applyLinks } from "../link.ts";
 import { variantForms } from "../nlp.ts";
 import type { Suggestion } from "../ui/suggestion.ts";
+import { basenameOf, filterSelfHits, filterSelfSuggestions } from "../selfLink.ts";
 import { nlpSuggestions } from "../nlpSuggestions.ts";
+import { inScope, scopeFolderFor, effectiveScope, frontmatterNamespace } from "../scope.ts";
+import { occurrenceLines, rankByProximity } from "../proximity.ts";
+import { parseKeywords, serializeKeywords, type KeywordRecord } from "../keywordIO.ts";
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
 import { frontmatterDisabled } from "../validation.ts";
@@ -21,12 +25,15 @@ import type { IPlugin, ProgressCallback } from "./ipluginInterface.ts";
 const DISABLE_FRONTMATTER_KEY = 'auto-link';
 
 /** Note index over the vault's markdown files, per the existing-match mode. */
-function vaultNoteIndex(plugin: IPlugin): Map<string, string> {
-	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
-		path: f.path,
-		basename: f.basename,
-		aliases: plugin.noteAliases(f.path),
-	}));
+function vaultNoteIndex(plugin: IPlugin, doc?: string): Map<string, string> {
+	const effScope = effectiveScope(plugin.settings, doc ? frontmatterNamespace(doc) : '');
+	const entries: IndexEntry[] = plugin.markdownFiles()
+		.filter((f) => inScope(f.path, effScope, plugin.folder()))
+		.map((f) => ({
+			path: f.path,
+			basename: f.basename,
+			aliases: plugin.noteAliases(f.path),
+		}));
 	return buildNoteIndex(entries, plugin.settings.existingMatchMode);
 }
 
@@ -87,13 +94,19 @@ async function targetFolder(
 export function linkTemplateKeywords(plugin: IPlugin, quiet = false): void {
 	const doc = plugin.value();
 	if (disabledFor(doc)) return;
-	const hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
+	let hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
 	if (!hits.length) {
 		if (!quiet) plugin.notice('No template matches found.');
 		return;
 	}
-	// Fold variant references onto existing notes (Armor Classes → Armor Class).
-	foldHitTargets(hits, vaultNoteIndex(plugin));
+	// Fold variant references onto existing notes (Armor Classes → Armor Class),
+	// then drop hits that would link the note back to itself.
+	foldHitTargets(hits, vaultNoteIndex(plugin, doc));
+	hits = filterSelfHits(hits, basenameOf(plugin.source()));
+	if (!hits.length) {
+		if (!quiet) plugin.notice('No template matches found.');
+		return;
+	}
 	plugin.set(applyLinks(doc, hits, plugin.settings.capitalize));
 	plugin.notice(`Linked ${hits.length} keyword(s).`);
 }
@@ -116,9 +129,11 @@ function nlpOpts(plugin: IPlugin) {
 export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 	const doc = plugin.value();
 	if (disabledFor(doc)) return;
+	const effScope = effectiveScope(plugin.settings, frontmatterNamespace(doc));
 	const folder = plugin.folder();
 	const source = plugin.source();
-	const found: Suggestion[] = [];
+	const selfName = basenameOf(source);
+	let found: Suggestion[] = [];
 	if (plugin.settings.enableTemplateKeywords) {
 		found.push(
 			...collectSuggestions(
@@ -136,7 +151,7 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 		const excludeBasename = source.split('/').pop()?.replace(/\.md$/i, '');
 		const hits = findExistingHits(
 			doc,
-			vaultNoteIndex(plugin),
+			vaultNoteIndex(plugin, doc),
 			{
 				...scanOpts(plugin),
 				capitalize: plugin.settings.capitalize,
@@ -160,10 +175,18 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 		}
 		found.push(...byBase.values());
 	}
+	found = filterSelfSuggestions(found, selfName);
 	if (!found.length && !plugin.settings.enableNlpKeywords) {
 		plugin.notice('No keyword matches found.');
 		return;
 	}
+	// Rank suggestions by occurrence proximity: phrases whose occurrences
+	// cluster in the note rank higher. Ranking only — the set is unchanged.
+	found = rankByProximity(found, (s) =>
+		s.hits?.length
+			? s.hits.map((h) => h.lineIndex)
+			: occurrenceLines(doc, [s.name, ...(s.aliases ?? []), ...variantForms(s.name)]),
+	);
 	// The apply path only ever touches the active note, so which list is shown
 	// (note-only vs vault-context) changes only *what* gets created/linked.
 	// The vault-context list is reconciled + read from the cache on demand.
@@ -173,7 +196,10 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 				label: 'Vault context',
 				load: async (progress?: ProgressCallback): Promise<Suggestion[]> => {
 					await plugin.ensureVaultCache(opts, progress);
-					return plugin.vaultContextSuggestions(source, doc, opts);
+					return filterSelfSuggestions(
+						plugin.vaultContextSuggestions(source, doc, opts),
+						selfName,
+					);
 				},
 			}
 		: undefined;
@@ -181,7 +207,10 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 		let active = found;
 		if (listIndex === 1 && secondary) {
 			await plugin.ensureVaultCache(opts);
-			active = plugin.vaultContextSuggestions(source, doc, opts);
+			active = filterSelfSuggestions(
+				plugin.vaultContextSuggestions(source, doc, opts),
+				selfName,
+			);
 		}
 		let created = 0;
 		let appended = 0;
@@ -193,12 +222,13 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 				.filter((s): s is Suggestion => !!s),
 		);
 		const dest = await targetFolder(plugin, folder, {});
+		const createFolder = scopeFolderFor(effScope, folder) || dest;
 		for (const g of groups) {
 			if (g.existing) continue;
 			try {
 				const res = await createNote(
 					plugin,
-					dest,
+					createFolder,
 					{ name: g.name, content: g.content, aliases: g.aliases },
 					plugin.settings.capitalize,
 					onWrite,
@@ -263,9 +293,11 @@ export async function processVaultAndPreview(
 		);
 		for (const g of groups) {
 			try {
+				const dest = await targetFolder(plugin, g.targetFolder ?? '', promptCache);
+				const createFolder = scopeFolderFor(plugin.settings, plugin.folder()) || dest;
 				const res = await createNote(
 					plugin,
-					await targetFolder(plugin, g.targetFolder ?? '', promptCache),
+					createFolder,
 					{ name: g.name, content: g.content, aliases: g.aliases },
 					plugin.settings.capitalize,
 					onWrite,
@@ -283,11 +315,15 @@ export async function processVaultAndPreview(
 			const targetIdx = groupIndex(groups);
 			if (targetIdx.size) {
 				for (const file of plugin.markdownFiles()) {
+					if (!inScope(file.path, plugin.settings, plugin.folder())) continue;
 					const doc = await plugin.read(file.path);
 					if (disabledFor(doc)) continue;
-					const hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
+					let hits = findAllByTemplates(doc, plugin.settings.templates, scanOpts(plugin));
 					if (!hits.length) continue;
 					foldHitTargets(hits, targetIdx);
+					// Never link a file's own note (Cow.md → [[Cow]]).
+					hits = filterSelfHits(hits, basenameOf(file.path));
+					if (!hits.length) continue;
 					const updated = applyLinks(doc, hits, plugin.settings.capitalize);
 					if (updated === doc) continue;
 					if (onWrite) await onWrite(file.path, updated);
@@ -312,11 +348,15 @@ export function linkExistingNotes(plugin: IPlugin): void {
 	const doc = plugin.value();
 	if (disabledFor(doc)) return;
 	const excludeBasename = source.split('/').pop()?.replace(/\.md$/i, '');
-	const entries: IndexEntry[] = plugin.markdownFiles().map((f) => ({
-		path: f.path,
-		basename: f.basename,
-		aliases: plugin.noteAliases(f.path),
-	}));
+	const s = plugin.settings;
+	const effScope = effectiveScope(s, frontmatterNamespace(doc));
+	const entries: IndexEntry[] = plugin.markdownFiles()
+		.filter((f) => inScope(f.path, effScope, plugin.folder()))
+		.map((f) => ({
+			path: f.path,
+			basename: f.basename,
+			aliases: plugin.noteAliases(f.path),
+		}));
 	const index = buildNoteIndex(entries, plugin.settings.existingMatchMode, source);
 	if (plugin.settings.linkUnresolved) {
 		for (const name of plugin.unresolvedLinks()) {
@@ -346,4 +386,73 @@ export function linkExistingNotes(plugin: IPlugin): void {
 	}
 	plugin.set(res.updated);
 	plugin.notice(`Linked ${res.count} occurrence(s) to existing notes.`);
+}
+
+/**
+ * Export all discovered keywords (template+NLP suggestions and existing-note
+ * names/aliases) as a JSON file so the keyword set survives a vault move.
+ */
+export async function exportKeywordFile(
+	plugin: IPlugin,
+	path: string,
+	onProgress?: ProgressCallback,
+	signal?: AbortSignal,
+): Promise<void> {
+	const records: KeywordRecord[] = [];
+	// Existing-note keywords: every note name + its frontmatter aliases.
+	for (const f of plugin.markdownFiles()) {
+		const aliases = plugin.noteAliases(f.path);
+		if (f.basename || aliases.length) {
+			records.push({ name: f.basename, aliases });
+		}
+	}
+	// Template + NLP keywords discovered by a vault scan.
+	const collected = await collectVaultSuggestions(plugin, plugin.settings, onProgress, signal);
+	if (collected && !signal?.aborted) {
+		for (const s of collected) {
+			records.push({ name: s.name, aliases: s.aliases ?? [], content: s.content });
+		}
+	}
+	await plugin.write(path, serializeKeywords(records));
+	plugin.notice(`Exported ${records.length} keyword record(s) to ${path}.`);
+}
+
+/**
+ * Import a keyword file: create the target notes (with aliases/content) so
+ * plain-text mentions of those keywords link again after a vault move.
+ */
+export async function importKeywordFile(
+	plugin: IPlugin,
+	path: string,
+): Promise<number> {
+	const raw = await plugin.read(path);
+	const { records, error } = parseKeywords(raw);
+	if (error) {
+		plugin.notice(`Auto Link Creator: ${error}`);
+		return 0;
+	}
+	if (!records.length) {
+		plugin.notice('No keywords found in file.');
+		return 0;
+	}
+	const onWrite = plugin.undoableWriter();
+	let created = 0;
+	let appended = 0;
+	for (const r of records) {
+		try {
+			const res = await createNote(
+				plugin,
+				'',
+				{ name: r.name, aliases: r.aliases, content: r.content },
+				plugin.settings.capitalize,
+				onWrite,
+			);
+			if (res.created) created++;
+			else appended++;
+		} catch {
+			// Skip keywords that can't be materialized; continue the rest.
+		}
+	}
+	plugin.notice(`Imported ${records.length}: created ${created}, appended ${appended}.`);
+	return records.length;
 }
