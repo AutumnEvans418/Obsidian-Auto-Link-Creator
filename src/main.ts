@@ -33,6 +33,7 @@ import {
 	type VaultNlpCache,
 } from './vaultNlpCache.ts';
 import type { NlpOptions } from './keywords.ts';
+import { DEFAULT_IGNORES } from './validation.ts';
 
 /** Blocking indicator shown while a preview scan runs. */
 class LoadingModal extends Modal {
@@ -519,10 +520,23 @@ export default class AutoLinkCreator extends Plugin {
 	}
 
 	async loadSettings() {
+		const loaded = (await this.loadData()) as
+			| (Partial<AutoLinkSettings> & { ignoreDates?: boolean })
+			| null;
+		if (loaded && typeof loaded.ignoreDates === 'boolean') {
+			const ignores = Array.isArray(loaded.ignores)
+				? [...loaded.ignores]
+				: [...DEFAULT_IGNORES];
+			const dateIdx = ignores.findIndex((i) => i.label === 'Dates');
+			if (loaded.ignoreDates && dateIdx === -1) ignores.push(DEFAULT_IGNORES[1]!);
+			if (!loaded.ignoreDates && dateIdx !== -1) ignores.splice(dateIdx, 1);
+			loaded.ignores = ignores;
+			delete loaded.ignoreDates;
+		}
 		this.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<AutoLinkSettings>,
+			loaded ?? {},
 		);
 	}
 

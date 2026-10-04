@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyExistingLinks, buildNoteIndex, foldHitTargets } from '../src/existingLinks.ts';
+import { makeIgnored, DEFAULT_IGNORES } from '../src/validation.ts';
 
 const entries = [
 	{ path: 'a/Cow.md', basename: 'Cow', aliases: ['Bovine'] },
@@ -45,6 +46,17 @@ test('skips note names inside URLs', () => {
 	const res = applyExistingLinks(doc, idx, { capitalize: false });
 	assert.equal(res.count, 0);
 	assert.equal(res.updated, doc);
+});
+
+test('ignores numeric note names by default (no [[6]] from stray links)', () => {
+	const idx = buildNoteIndex([{ path: '6.md', basename: '6', aliases: [] }], 'exact');
+	const doc = 'version 6 ships today';
+	const res = applyExistingLinks(doc, idx, { capitalize: false, ignored: makeIgnored(DEFAULT_IGNORES) });
+	assert.equal(res.count, 0);
+	assert.equal(res.updated, doc);
+	const off = applyExistingLinks(doc, idx, { capitalize: false, ignored: () => false });
+	assert.equal(off.count, 1);
+	assert.match(off.updated, /version \[\[6\]\] ships today/);
 });
 
 test('capitalization rules apply when enabled', () => {

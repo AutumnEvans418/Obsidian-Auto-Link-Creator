@@ -14,12 +14,32 @@ export function frontmatterEnd(lines: string[]): number {
 	return lines.findIndex((l, i) => i > 0 && l.trim() === '---');
 }
 
+export interface IgnoreRule {
+	/** Human-readable label shown in settings (e.g. "Numbers"). */
+	label: string;
+	/** Regex tested against the whole phrase name to skip it. */
+	regex: string;
+}
+
+/** Default ignore rules: bare numbers and date/number-like phrases. */
+export const DEFAULT_IGNORES: IgnoreRule[] = [
+	{ label: 'Numbers', regex: '^\\d+$' },
+	{ label: 'Dates', regex: '^\\d[\\d\\s\\-/:.,+TZtz]*$' },
+];
+
 /**
- * True for numeric/date-like phrases: "2026", "2026-08-24",
- * "2026-08-24T23:47:33-05:00". Only digits plus separators/T/Z allowed.
+ * Compile an ignore-rule list into a `(name) => boolean` predicate. Matches the
+ * ENTIRE name (`^(?:…)$`); invalid regexes contribute nothing, never throw.
  */
-export function isDateLike(name: string): boolean {
-	return /\d/.test(name) && !/[^\d\s\-/:.,+TZtz]/.test(name);
+export function makeIgnored(ignores: IgnoreRule[]): (name: string) => boolean {
+	const res = (ignores ?? []).map((r) => {
+		try {
+			return new RegExp(`^(?:${r.regex})$`);
+		} catch {
+			return null;
+		}
+	}).filter((r): r is RegExp => !!r);
+	return (name) => res.some((re) => re.test(name));
 }
 
 export interface CodeblockFilterOptions {

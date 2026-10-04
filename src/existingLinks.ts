@@ -72,6 +72,8 @@ export interface ExistingLinkOptions extends CodeblockFilterOptions {
 	capitalize?: boolean;
 	/** Skip matches whose basename equals this (avoid self-links). */
 	excludeBasename?: string;
+	/** Skip matches whose surface matches a custom ignore rule (numbers, dates…). */
+	ignored?: (name: string) => boolean;
 }
 
 function overlapsAny(
@@ -149,6 +151,7 @@ export function findExistingHits(
 		const taken = wikiSpans(line);
 		taken.push(...urlSpans(line));
 		for (const m of matches) {
+			if (opts.ignored?.(m.surface)) continue;
 			if (overlapsAny(taken, m.start, m.end)) continue;
 			taken.push({ start: m.start, end: m.end });
 			hits.push({

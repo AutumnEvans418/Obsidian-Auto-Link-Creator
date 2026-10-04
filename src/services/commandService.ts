@@ -20,6 +20,7 @@ import { parseKeywords, serializeKeywords, type KeywordRecord } from "../keyword
 import { findAllByTemplates } from "../template.ts";
 import type { ParsedTemplate } from "../template.ts";
 import { frontmatterDisabled } from "../validation.ts";
+import { makeIgnored } from "../validation.ts";
 import type { IPlugin, ProgressCallback } from "./ipluginInterface.ts";
 
 const DISABLE_FRONTMATTER_KEY = 'auto-link';
@@ -41,7 +42,7 @@ function vaultNoteIndex(plugin: IPlugin, doc?: string): Map<string, string> {
 function scanOpts(plugin: IPlugin) {
 	return {
 		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
-		ignoreDates: plugin.settings.ignoreDates,
+		ignored: makeIgnored(plugin.settings.ignores),
 		allowedCodeblocks: plugin.settings.allowedCodeblocks,
 		ignoreHtml: plugin.settings.ignoreHtml,
 		matchLongerAcrossLinks: plugin.settings.matchLongerAcrossLinks,
@@ -256,6 +257,7 @@ export async function processFileAndPreview(plugin: IPlugin): Promise<void> {
 			ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 			allowedCodeblocks: plugin.settings.allowedCodeblocks,
 			ignoreHtml: plugin.settings.ignoreHtml,
+			ignored: makeIgnored(plugin.settings.ignores),
 		});
 		if (res.updated !== current) plugin.set(res.updated);
 		const linked = toLink.length + res.count;
@@ -379,6 +381,7 @@ export function linkExistingNotes(plugin: IPlugin): void {
 		ignoreCodeblocks: plugin.settings.ignoreCodeblocks,
 		allowedCodeblocks: plugin.settings.allowedCodeblocks,
 		ignoreHtml: plugin.settings.ignoreHtml,
+		ignored: makeIgnored(plugin.settings.ignores),
 	});
 	if (!res.count) {
 		plugin.notice('No existing-note matches found.');

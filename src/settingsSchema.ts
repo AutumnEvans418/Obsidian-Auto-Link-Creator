@@ -1,4 +1,7 @@
 /** Obsidian-free settings schema: importable from unit tests. */
+import { DEFAULT_IGNORES } from './validation.ts';
+import type { IgnoreRule } from './validation.ts';
+
 export interface AutoLinkSettings {
 	/** Line patterns like `- {{Link Name}} ({{Link Alias}}) - {{Link Content}}`. First match wins. */
 	templates: string[];
@@ -10,8 +13,8 @@ export interface AutoLinkSettings {
 	ignoreHtml: boolean;
 	/** Suppress the notice notifications after each linking run. */
 	disableNotices: boolean;
-	/** Skip date/number-like phrases (e.g. `2026`, `2026-08-24`) when linking. */
-	ignoreDates: boolean;
+	/** Skip phrases whose whole name matches one of these regexes when linking. */
+	ignores: IgnoreRule[];
 	/** Match a longer definition whose first words were already lowercase-linked. */
 	matchLongerAcrossLinks: boolean;
 	/** Capitalize each first letter of note names and link text. */
@@ -64,7 +67,7 @@ export const DEFAULT_SETTINGS: AutoLinkSettings = {
 	allowedCodeblocks: [],
 	ignoreHtml: false,
 	disableNotices: false,
-	ignoreDates: true,
+	ignores: [...DEFAULT_IGNORES],
 	matchLongerAcrossLinks: false,
 	capitalize: true,
 	enableTemplateKeywords: true,

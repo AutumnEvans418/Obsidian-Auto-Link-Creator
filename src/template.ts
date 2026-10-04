@@ -1,6 +1,6 @@
 import { sameReference } from './nlp.ts';
 import { wikiSpans } from './linkDetector.ts';
-import { frontmatterEnd, isDateLike, makeCodeblockFilter } from './validation.ts';
+import { frontmatterEnd, makeCodeblockFilter, DEFAULT_IGNORES, makeIgnored } from './validation.ts';
 import type { CodeblockFilterOptions } from './validation.ts';
 
 export interface ParsedTemplate {
@@ -172,7 +172,7 @@ export interface TemplateOptions extends CodeblockFilterOptions {
 	 */
 	matchLongerAcrossLinks?: boolean;
 	/** Skip hits whose name is date/number-like (e.g. `2026-08-24`). */
-	ignoreDates?: boolean;
+	ignored?: (name: string) => boolean;
 }
 
 /** True when a matched name should be dropped: junk (`--`) or date-like. */
@@ -222,11 +222,13 @@ function stripFormatting(raw: string): { name: string; offset: number } {
 }
 
 function rejectedName(name: string, opts: TemplateOptions): boolean {
-	const ignoreDates = opts.ignoreDates ?? true;
-	// Punctuation-only junk ("--") is never a link name; numeric/date-like
-	// names ("2026", "2026-08-24T…") follow the ignore-dates setting.
-	if (!/\p{L}/u.test(name)) return !/\d/.test(name) || ignoreDates;
-	return ignoreDates && isDateLike(name);
+	// Custom ignore rules (numbers, dates, …) win; punctuation-only junk
+	// ("--") is never a link name. Defaults to the built-in rules so callers
+	// that skip the settings pass still drop numeric/date-like names.
+	const ignored = opts.ignored ?? makeIgnored(DEFAULT_IGNORES);
+	if (ignored(name)) return true;
+	if (!/\p{L}/u.test(name)) return !/\d/.test(name);
+	return false;
 }
 
 /**

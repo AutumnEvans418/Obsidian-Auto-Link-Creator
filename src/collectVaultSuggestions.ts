@@ -8,6 +8,7 @@ import { type ParsedTemplate, groupByReference, findAllByTemplates, groupContent
 import { vaultKeywordHits } from './vaultNlpCache.ts';
 import type { Suggestion } from './ui/suggestion.ts';
 import { inScope } from './scope.ts';
+import { makeIgnored } from './validation.ts';
 
 /** Resolve a name to an existing note whose basename/alias shares a form. */
 function existingNoteResolver(plugin: IPlugin, mode: AutoLinkSettings['existingMatchMode'], sourceFolder?: string) {
@@ -78,7 +79,7 @@ export async function collectVaultSuggestions(
 			for (const group of groupByReference(
 				findAllByTemplates(doc, s.templates, {
 				ignoreCodeblocks: s.ignoreCodeblocks,
-				ignoreDates: s.ignoreDates,
+				ignored: makeIgnored(s.ignores),
 				allowedCodeblocks: s.allowedCodeblocks,
 			})
 			)) {

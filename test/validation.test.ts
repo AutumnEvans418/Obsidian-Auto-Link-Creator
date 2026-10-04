@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	isValidTemplate,
-	isDateLike,
+	makeIgnored,
+	DEFAULT_IGNORES,
 	frontmatterEnd,
 	frontmatterDisabled,
 	makeCodeblockFilter,
@@ -28,13 +29,27 @@ test('rejects empty template', () => {
 	assert.equal(isValidTemplate(''), false);
 });
 
-test('isDateLike matches dates/numbers, not words', () => {
-	assert.equal(isDateLike('2026'), true);
-	assert.equal(isDateLike('2026-08-24'), true);
-	assert.equal(isDateLike('2026-08-24T23:47:33-05:00'), true);
-	assert.equal(isDateLike('Armor Class'), false);
-	assert.equal(isDateLike('--'), false);
-	assert.equal(isDateLike('v2'), false);
+test('makeIgnored rejects default numbers/dates, keeps words', () => {
+	const ignored = makeIgnored(DEFAULT_IGNORES);
+	assert.equal(ignored('6'), true);
+	assert.equal(ignored('2026'), true);
+	assert.equal(ignored('2026-08-24'), true);
+	assert.equal(ignored('2026-08-24T23:47:33-05:00'), true);
+	assert.equal(ignored('Armor Class'), false);
+	assert.equal(ignored('--'), false);
+	assert.equal(ignored('v2'), false);
+});
+
+test('makeIgnored matches the whole name; invalid regex is skipped', () => {
+	const ignored = makeIgnored([
+		{ label: 'numbers', regex: '^\\d+$' },
+		{ label: 'broken', regex: '(' },
+		{ label: 'exact', regex: 'v2' },
+	]);
+	assert.equal(ignored('6'), true);
+	assert.equal(ignored('v2'), true);
+	assert.equal(ignored('v20'), false);
+	assert.doesNotThrow(() => ignored('anything'));
 });
 
 test('frontmatterEnd finds the closing fence, or -1', () => {

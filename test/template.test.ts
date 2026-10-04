@@ -96,7 +96,7 @@ test('rejects blank name line (empty draft)', () => {
 
 test('rejects names without any letter (e.g. `--` from frontmatter lists)', () => {
 	assert.equal(matchTemplate('- --', '- {{Link Name}}'), null);
-	assert.ok(matchTemplate('- 123', '- {{Link Name}}', { ignoreDates: false }));
+	assert.ok(matchTemplate('- 123', '- {{Link Name}}', { ignored: () => false }));
 	assert.equal(matchTemplate('- 123', '- {{Link Name}}'), null);
 	assert.ok(matchTemplate('- Cow', '- {{Link Name}}'));
 });
@@ -111,15 +111,15 @@ test('skips YAML frontmatter block entirely', () => {
 		'---',
 		'- Real (yes) - is a hit',
 	].join('\n');
-	const all = findAllByTemplates(doc, DEFAULTS, { ignoreDates: true });
+	const all = findAllByTemplates(doc, DEFAULTS);
 	assert.equal(all.length, 1);
 	assert.equal(all[0]?.name, 'Real');
 });
 
-test('ignoreDates drops date-like names; off keeps them', () => {
+test('default ignores drop number/date-like names; custom div returns them', () => {
 	const doc = '- 2026-08-24 - a date\n- Cow - an animal';
-	assert.equal(findAllByTemplates(doc, DEFAULTS, { ignoreDates: true }).length, 1);
-	const all = findAllByTemplates(doc, DEFAULTS, { ignoreDates: false });
+	assert.equal(findAllByTemplates(doc, DEFAULTS).length, 1);
+	const all = findAllByTemplates(doc, DEFAULTS, { ignored: () => false });
 	assert.equal(all.length, 2);
 	// Lazy capture stops the name at the first `-` separator.
 	assert.equal(all[0]?.name, '2026');

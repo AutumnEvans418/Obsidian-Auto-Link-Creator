@@ -151,13 +151,57 @@ export class AutoLinkSettingTab extends PluginSettingTab {
 		});
 
 		defs.push({
-			name: 'Ignore dates',
-			desc: 'Skip date/number-like phrases (e.g. 2026, 2026-08-24) when linking.',
-			control: {
-				type: 'toggle',
-				key: 'ignoreDates',
+			name: 'Ignore phrases',
+			desc: 'Skip phrases whose whole name matches one of these regular expressions (e.g. numbers, dates).',
+			action: () => {
+				plugin.settings.ignores.push({ label: 'New ignore', regex: '' });
+				void plugin.saveSettings().then(() => this.update());
 			},
 		});
+
+		for (let index = 0; index < plugin.settings.ignores.length; index++) {
+			const rule = plugin.settings.ignores[index]!;
+			defs.push({
+				name: `Ignore ${index + 1}`,
+				render: (setting: Setting) => {
+					setting
+						.addText((text) =>
+							text
+								.setPlaceholder('Label')
+								.setValue(rule.label)
+								.onChange(async (value) => {
+									rule.label = value;
+									await plugin.saveSettings();
+								}),
+						)
+						.addText((text) => {
+							text
+								.setPlaceholder('^\\d+$')
+								.setValue(rule.regex)
+								.onChange(async (value) => {
+									rule.regex = value;
+									try {
+										new RegExp(value);
+										text.inputEl.removeClass('mod-error');
+									} catch {
+										text.inputEl.addClass('mod-error');
+									}
+									await plugin.saveSettings();
+								});
+						})
+						.addExtraButton((btn) =>
+							btn
+								.setIcon('trash-2')
+								.setTooltip('Delete ignore')
+								.onClick(async () => {
+									plugin.settings.ignores.splice(index, 1);
+									await plugin.saveSettings();
+									this.update();
+								}),
+						);
+				},
+			});
+		}
 
 		defs.push({
 			name: 'Match longer definitions over already-linked words',
