@@ -39,6 +39,14 @@ test('skips matches inside wiki links (idempotent)', () => {
 	assert.equal(twice.updated, once.updated);
 });
 
+test('skips note names inside URLs', () => {
+	const idx = buildNoteIndex([{ path: 'Budget.md', basename: 'Budget', aliases: [] }], 'exact');
+	const doc = '## Website Made\nhttps://budget.autumnevans.dev/';
+	const res = applyExistingLinks(doc, idx, { capitalize: false });
+	assert.equal(res.count, 0);
+	assert.equal(res.updated, doc);
+});
+
 test('capitalization rules apply when enabled', () => {
 	const idx = buildNoteIndex(entries, 'exact');
 	const res = applyExistingLinks('the cow is here', idx, { capitalize: true });

@@ -1,4 +1,4 @@
-import { isTableRow, wikiSpans } from './linkDetector.ts';
+import { isTableRow, urlSpans, wikiSpans } from './linkDetector.ts';
 import { titleCase, variantForms } from './nlp.ts';
 import type { ParsedTemplate } from './template.ts';
 import { makeCodeblockFilter } from './validation.ts';
@@ -147,6 +147,7 @@ export function findExistingHits(
 		}
 		matches.sort((a, b) => a.start - b.start || b.end - a.end);
 		const taken = wikiSpans(line);
+		taken.push(...urlSpans(line));
 		for (const m of matches) {
 			if (overlapsAny(taken, m.start, m.end)) continue;
 			taken.push({ start: m.start, end: m.end });
